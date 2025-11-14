@@ -39,13 +39,18 @@ async function connectDB() {
    try {
       // 먼저 연결 테스트
       await sequelize.authenticate()
+      console.log('✅ 데이터베이스 연결 성공')
       await sequelize.sync({ force: false, alter: false })
+      console.log('✅ 데이터베이스 동기화 완료')
    } catch (err) {
-      if (err.original && err.original.code === 'ER_BAD_DB_ERROR') {
-         console.error(`데이터베이스가 존재하지 않습니다: ${process.env.DB_NAME}`)
+      console.error('❌ 데이터베이스 연결 실패')
+      if (err.original) {
+         console.error('원본 에러:', err.original.message)
+         console.error('에러 코드:', err.original.code)
       } else {
-         console.error('데이터베이스 연결 실패:', err.message)
+         console.error('에러 메시지:', err.message)
       }
+      console.error('전체 에러:', err)
       process.exit(1) // 서버 시작 실패 시 종료
    }
 }
