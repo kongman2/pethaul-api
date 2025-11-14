@@ -18,6 +18,37 @@ module.exports = class Order extends Sequelize.Model {
                */
                allowNull: false,
             },
+            deliveryName: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '배송지 수령인 이름',
+            },
+            deliveryPhone: {
+               type: Sequelize.STRING(20),
+               allowNull: true,
+               comment: '배송지 연락처',
+            },
+            deliveryAddress: {
+               type: Sequelize.STRING(500),
+               allowNull: true,
+               comment: '배송지 주소',
+            },
+            deliveryAddressDetail: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '배송지 상세 주소',
+            },
+            deliveryRequest: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '배송 요청 사항',
+            },
+            isPurchaseConfirmed: {
+               type: Sequelize.BOOLEAN,
+               allowNull: false,
+               defaultValue: false,
+               comment: '구매 확정 여부',
+            },
          },
          {
             sequelize,
@@ -41,6 +72,11 @@ module.exports = class Order extends Sequelize.Model {
          through: db.OrderItem,
          foreignKey: 'orderId',
          otherKey: 'itemId',
+      })
+      Order.hasMany(db.ExchangeReturn, {
+         foreignKey: 'orderId',
+         sourceKey: 'id',
+         onDelete: 'CASCADE',
       })
    }
 }

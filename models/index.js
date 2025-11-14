@@ -3,6 +3,11 @@ const Sequelize = require('sequelize')
 const env = process.env.NODE_ENV || 'development'
 const config = require('../config/config')[env]
 
+// 환경 변수 검증
+if (!config.database || !config.username || !config.host) {
+   console.error('데이터베이스 설정이 누락되었습니다. 필요한 환경 변수: DB_NAME, DB_USERNAME, DB_HOST, DB_PASSWORD')
+}
+
 const User = require('./user')
 const Item = require('./item')
 const Cart = require('./cart')
@@ -20,6 +25,8 @@ const Domain = require('./domain')
 const Like = require('./like')
 const Content = require('./content')
 const Qna = require('./qna')
+const SearchKeyword = require('./searchKeyword')
+const ExchangeReturn = require('./exchangeReturn')
 
 const db = {}
 const sequelize = new Sequelize(config.database, config.username, config.password, config)
@@ -52,6 +59,8 @@ Object.assign(db, {
    Like,
    Content,
    Qna,
+   SearchKeyword,
+   ExchangeReturn,
 })
 
 // Initialize
@@ -72,6 +81,8 @@ Domain.init(sequelize)
 Like.init(sequelize)
 Content.init(sequelize)
 Qna.init(sequelize)
+SearchKeyword.init(sequelize)
+ExchangeReturn.init(sequelize)
 
 // Associate
 User.associate(db)
@@ -91,5 +102,7 @@ Domain.associate(db)
 Like.associate(db)
 Content.associate(db)
 Qna.associate(db)
+SearchKeyword.associate(db)
+ExchangeReturn.associate(db)
 
 module.exports = db

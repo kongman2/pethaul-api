@@ -22,6 +22,10 @@ module.exports = class User extends Sequelize.Model {
                type: Sequelize.STRING(255),
                allowNull: true,
             },
+            addressDetail: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+            },
             gender: {
                type: Sequelize.CHAR(1),
                allowNull: true,
@@ -56,6 +60,31 @@ module.exports = class User extends Sequelize.Model {
                allowNull: true,
                comment: '임시 비밀번호 만료 시간',
             },
+            defaultDeliveryName: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '기본 배송지 수령인 이름',
+            },
+            defaultDeliveryPhone: {
+               type: Sequelize.STRING(20),
+               allowNull: true,
+               comment: '기본 배송지 연락처',
+            },
+            defaultDeliveryAddress: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '기본 배송지 주소',
+            },
+            defaultDeliveryRequest: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '기본 배송 요청 사항',
+            },
+            defaultDeliveryAddressDetail: {
+               type: Sequelize.STRING(255),
+               allowNull: true,
+               comment: '기본 배송지 상세 주소',
+            },
          },
          {
             sequelize,
@@ -80,5 +109,6 @@ module.exports = class User extends Sequelize.Model {
       User.hasMany(db.Like, { foreignKey: 'userId', sourceKey: 'id', onDelete: 'CASCADE' })
       User.hasMany(db.Content, { foreignKey: 'authorId', sourceKey: 'id', onDelete: 'SET NULL', onUpdate: 'CASCADE' })
       User.hasMany(db.Qna, { foreignKey: 'userId', sourceKey: 'id', onDelete: 'CASCADE' })
+      User.hasMany(db.ExchangeReturn, { foreignKey: 'userId', sourceKey: 'id', onDelete: 'CASCADE' })
    }
 }

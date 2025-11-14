@@ -1,5 +1,5 @@
 const express = require('express')
-const { Like, Item, ItemImage } = require('../models')
+const { Like, Item, ItemImage, Category } = require('../models')
 const { isLoggedIn } = require('./middlewares')
 
 const router = express.Router()
@@ -16,8 +16,11 @@ router.get('/me', isLoggedIn, async (req, res, next) => {
          include: [
             {
                model: Item,
-               attributes: ['id', 'itemNm', 'price'],
-               include: [{ model: ItemImage, attributes: ['id', 'oriImgName', 'imgUrl', 'repImgYn'] }],
+               attributes: ['id', 'itemNm', 'price', 'itemSellStatus'],
+               include: [
+                  { model: ItemImage, attributes: ['id', 'oriImgName', 'imgUrl', 'repImgYn'], separate: false },
+                  { model: Category, attributes: ['id', 'categoryName'], through: { attributes: [] } },
+               ],
             },
          ],
       })

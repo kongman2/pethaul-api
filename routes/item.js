@@ -3,7 +3,7 @@ const express = require('express')
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
-const { Item, ItemImage, Category, ItemCategory, Review, ReviewImage, User, Order, OrderItem } = require('../models')
+const { Item, ItemImage, Category, ItemCategory, Review, ReviewImage, User, Order, OrderItem, SearchKeyword, sequelize } = require('../models')
 const { isAdmin, verifyToken, isLoggedIn } = require('./middlewares')
 const { Op, col, fn } = require('sequelize')
 
@@ -13,7 +13,6 @@ const router = express.Router()
 try {
    fs.readdirSync('uploads')
 } catch (error) {
-   console.log('uploads 폴더가 없어 uploads 폴더를 생성합니다.')
    fs.mkdirSync('uploads')
 }
 
@@ -103,9 +102,9 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
 })
 
 /**
- * 2. 전체 상품 불러오기
+ * 2. 전체 상품 불러오기 (공개)
  */
-router.get('/', verifyToken, async (req, res, next) => {
+router.get('/', async (req, res, next) => {
    try {
       const page = parseInt(req.query.page, 10) || 1
       const limit = parseInt(req.query.limit, 10) || 10
@@ -154,6 +153,23 @@ router.get('/', verifyToken, async (req, res, next) => {
          include: includeModels,
       })
 
+      // 검색어가 있으면 검색어 기록 (비동기로 처리하여 응답 지연 방지)
+      if (searchTerm && searchTerm.trim()) {
+         const trimmedKeyword = searchTerm.trim()
+         SearchKeyword.findOrCreate({
+            where: { keyword: trimmedKeyword },
+            defaults: { keyword: trimmedKeyword, searchCount: 1 },
+         })
+            .then(([keyword, created]) => {
+               if (!created) {
+                  // 기존 검색어면 카운트 증가
+                  keyword.increment('searchCount')
+               }
+            })
+            .catch((err) => {
+            })
+      }
+
       return res.json({
          success: true,
          message: '상품 목록 조회 성공',
@@ -176,71 +192,128 @@ router.get('/', verifyToken, async (req, res, next) => {
  * 3. 메인 페이지용 상품 불러오기
  */
 router.get('/all/main', async (req, res, next) => {
+   const limit = Number(req.query.limit) || 5
+
+   const today = new Date()
+   today.setHours(0, 0, 0, 0)
+   const todayISOString = today.toISOString().slice(0, 19).replace('T', ' ')
+
    try {
-      const limit = Number(req.query.limit)
-
-      // // 1) 전체 판매량 기준
-      const topSales = await Item.findAll({
-         attributes: ['id', 'itemNm', 'price', 'itemSellStatus', [fn('SUM', col('OrderItems.count')), 'sellCount']],
-         include: [
-            { model: OrderItem, attributes: [] },
-            {
-               model: ItemImage,
-               attributes: ['oriImgName', 'imgUrl', 'repImgYn'],
-               where: { repImgYn: 'Y' },
-               required: false,
-            },
-         ],
-         group: ['Item.id', 'Item.itemNm', 'Item.price', 'Item.itemSellStatus', 'ItemImages.id'],
-         order: [[col('sellCount'), 'DESC']],
-         ...(limit > 0 ? { limit } : {}),
-         subQuery: false,
-      })
-
-      // // 2) 오늘 주문 건수 기준
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const topToday = await Item.findAll({
-         attributes: ['id', 'itemNm', 'price', 'itemSellStatus', [fn('COUNT', col('OrderItems.itemId')), 'orderCount']],
-
-         include: [
-            {
-               model: OrderItem,
-               attributes: [],
-               include: [{ model: Order, attributes: [], where: { orderDate: { [Op.gte]: today } } }],
-               required: true,
-            },
-
-            { model: ItemImage, attributes: ['oriImgName', 'imgUrl', 'repImgYn'], where: { repImgYn: 'Y' }, required: false },
-         ],
-         group: ['Item.id', 'Item.itemNm', 'Item.price', 'Item.itemSellStatus', 'ItemImages.id'],
-
-         order: [[col('orderCount'), 'DESC']],
-         ...(limit > 0 ? { limit } : {}),
-         subQuery: false,
-      })
-
-      // 3) 최신 등록 상품
-      const includeModels = [
-         { model: ItemImage, attributes: ['id', 'oriImgName', 'imgUrl', 'repImgYn'] },
+      const [topSalesResult, topTodayResult, newItemsResult] = await Promise.allSettled([
+         Item.findAll({
+            attributes: [
+               'id',
+               'itemNm',
+               'price',
+               'itemSellStatus',
+               [
+                  sequelize.literal(`(
+                     SELECT COALESCE(SUM(oi.count), 0)
+                     FROM orderItems AS oi
+                     WHERE oi.itemId = Item.id
+                  )`),
+                  'sellCount',
+               ],
+            ],
+            include: [
+               {
+                  model: ItemImage,
+                  attributes: ['imgUrl'],
+                  where: { repImgYn: 'Y' },
+                  required: false,
+                  separate: true,
+                  limit: 1,
+               },
+               {
+                  model: Category,
+                  attributes: ['categoryName'],
+                  through: { attributes: [] },
+                  required: false,
+               },
+            ],
+            order: [[sequelize.literal('sellCount'), 'DESC']],
+            limit,
+         }),
+         Item.findAll({
+            attributes: [
+               'id',
+               'itemNm',
+               'price',
+               'itemSellStatus',
+               [
+                  sequelize.literal(`(
+                     SELECT COUNT(*)
+                     FROM orderItems AS oi
+                     INNER JOIN orders AS o ON o.id = oi.orderId
+                     WHERE oi.itemId = Item.id
+                     AND o.orderDate >= '${todayISOString}'
+                  )`),
+                  'orderCount',
+               ],
+            ],
+            include: [
+               {
+                  model: ItemImage,
+                  attributes: ['imgUrl'],
+                  where: { repImgYn: 'Y' },
+                  required: false,
+                  separate: true,
+                  limit: 1,
+               },
+               {
+                  model: Category,
+                  attributes: ['categoryName'],
+                  through: { attributes: [] },
+                  required: false,
+               },
+            ],
+            order: [[sequelize.literal('orderCount'), 'DESC']],
+            limit,
+         }),
+         Item.findAll({
+            attributes: ['id', 'itemNm', 'price', 'itemSellStatus'],
+            include: [
+         { 
+            model: ItemImage, 
+                  attributes: ['imgUrl'],
+                  required: false,
+                  separate: true,
+                  limit: 1,
+         },
          {
             model: Category,
-            attributes: ['id', 'categoryName'],
+                  attributes: ['categoryName'],
          },
-      ]
-
-      const newItems = await Item.findAll({
+            ],
          order: [['createdAt', 'DESC']],
-         include: includeModels,
-         ...(limit > 0 ? { limit } : {}),
-      })
+            limit,
+         }),
+      ])
 
-      return res.json({
-         topSales,
-         topToday,
-         newItems,
-      })
+      const responsePayload = {
+         success: true,
+         message: '메인 상품 목록 조회 성공',
+         topSales: topSalesResult.status === 'fulfilled' ? topSalesResult.value : [],
+         topToday: topTodayResult.status === 'fulfilled' ? topTodayResult.value : [],
+         newItems: newItemsResult.status === 'fulfilled' ? newItemsResult.value : [],
+      }
+
+      const errors = []
+      if (topSalesResult.status === 'rejected') {
+         errors.push({ section: 'topSales', message: topSalesResult.reason?.message })
+      }
+      if (topTodayResult.status === 'rejected') {
+         errors.push({ section: 'topToday', message: topTodayResult.reason?.message })
+      }
+      if (newItemsResult.status === 'rejected') {
+         errors.push({ section: 'newItems', message: newItemsResult.reason?.message })
+      }
+
+      if (errors.length > 0) {
+         responsePayload.partialErrors = errors
+      }
+
+      return res.json(responsePayload)
    } catch (error) {
       error.status = error.status || 500
       error.message = '메인 상품 목록 불러오기 실패'
@@ -249,9 +322,34 @@ router.get('/all/main', async (req, res, next) => {
 })
 
 /**
- * 4. 특정 상품 불러오기
+ * 인기 검색어 조회 (동적 라우트 /:id 보다 먼저 정의해야 함)
  */
-router.get('/:id', verifyToken, async (req, res, next) => {
+router.get('/popular-keywords', async (req, res, next) => {
+   try {
+      const limit = parseInt(req.query.limit, 10) || 4
+
+      const keywords = await SearchKeyword.findAll({
+         order: [['searchCount', 'DESC'], ['updatedAt', 'DESC']],
+         limit,
+         attributes: ['keyword', 'searchCount'],
+      })
+
+      return res.json({
+         success: true,
+         message: '인기 검색어 조회 성공',
+         keywords: keywords.map((k) => k.keyword),
+      })
+   } catch (error) {
+      error.status = error.status || 500
+      error.message = '인기 검색어 불러오기 실패'
+      return next(error)
+   }
+})
+
+/**
+ * 4. 특정 상품 불러오기 (공개)
+ */
+router.get('/:id', async (req, res, next) => {
    try {
       const item = await Item.findOne({
          where: { id: req.params.id },
@@ -389,7 +487,6 @@ router.post('/recommend', async (req, res, next) => {
          result,
       })
    } catch (err) {
-      console.error(err)
       return next(err)
    }
 })

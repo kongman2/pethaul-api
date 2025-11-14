@@ -50,7 +50,6 @@ exports.isAdmin = (req, res, next) => {
 exports.verifyToken = (req, res, next) => {
    try {
       // 프론트엔드에서 전달한 토큰
-      console.log('req.headers.authorization:', req.headers.authorization)
 
       // 토큰 검증
       req.decoded = jwt.verify(req.headers.authorization, process.env.JWT_SECRET)

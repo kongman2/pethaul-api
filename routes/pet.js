@@ -25,7 +25,6 @@ function decodeOriginalName(raw) {
 try {
    fs.readdirSync('uploads')
 } catch (error) {
-   console.log('uploads 폴더가 없어 uploads 폴더를 생성합니다.')
    fs.mkdirSync('uploads')
 }
 
@@ -47,12 +46,12 @@ const upload = multer({
 
 /** 펫 등록 (이미지 포함)
  * [POST] /
- * form-data: petName, petType, breed, gender, age, (files) img[]
+ * form-data: petName, petType, breed, gender, age, surveyResult, (files) img[]
  */
 router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
    const t = await sequelize.transaction()
    try {
-      const { petName, petType, breed, gender } = req.body
+      const { petName, petType, breed, gender, surveyResult, ageInMonths } = req.body
       const age = Number(req.body.age ?? 0)
 
       if (!petName || !petType) {
@@ -62,8 +61,29 @@ router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
          return next(error)
       }
 
+      // 설문조사 결과 파싱 (JSON 문자열인 경우)
+      let parsedSurveyResult = null
+      if (surveyResult) {
+         try {
+            parsedSurveyResult = typeof surveyResult === 'string' ? JSON.parse(surveyResult) : surveyResult
+         } catch (e) {
+         }
+      }
+
       // 1) 펫 생성
-      const pet = await Pet.create({ userId: req.user.id, petName, petType, breed, gender, age }, { transaction: t })
+      const pet = await Pet.create(
+         { 
+            userId: req.user.id, 
+            petName, 
+            petType, 
+            breed, 
+            gender, 
+            age,
+            ageInMonths: ageInMonths ? Number(ageInMonths) : null,
+            surveyResult: parsedSurveyResult
+         }, 
+         { transaction: t }
+      )
 
       // 2) 이미지 저장
       let petImages = []
@@ -97,7 +117,7 @@ router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
  */
 router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) => {
    try {
-      const { petName, petType, breed, gender } = req.body
+      const { petName, petType, breed, gender, surveyResult, ageInMonths } = req.body
       const age = Number(req.body.age ?? 0)
 
       const pet = await Pet.findByPk(req.params.id)
@@ -112,7 +132,24 @@ router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) 
          return next(error)
       }
 
-      await pet.update({ petName, petType, breed, gender, age })
+      // 설문조사 결과 파싱 (JSON 문자열인 경우)
+      let parsedSurveyResult = pet.surveyResult // 기존 값 유지
+      if (surveyResult !== undefined) {
+         try {
+            parsedSurveyResult = typeof surveyResult === 'string' ? JSON.parse(surveyResult) : surveyResult
+         } catch (e) {
+         }
+      }
+
+      await pet.update({ 
+         petName, 
+         petType, 
+         breed, 
+         gender, 
+         age, 
+         ageInMonths: ageInMonths !== undefined ? (ageInMonths ? Number(ageInMonths) : null) : pet.ageInMonths,
+         surveyResult: parsedSurveyResult 
+      })
 
       // 파일이 올라오면 기존 이미지 교체
       if (Array.isArray(req.files) && req.files.length > 0) {

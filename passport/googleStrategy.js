@@ -31,7 +31,6 @@ module.exports = () => {
                   done(null, newUser)
                }
             } catch (error) {
-               console.error('Google 로그인 실패:', error)
                done(error)
             }
          }

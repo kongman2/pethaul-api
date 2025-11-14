@@ -34,7 +34,6 @@ module.exports = () => {
                   return done(null, false, { message: '가입되지 않은 회원입니다.' })
                }
             } catch (error) {
-               console.error('로그인 과정에서 에러 발생:', error)
                // 에러 처리 시 쿠키 관련 오류를 기록하고, 클라이언트에 적절한 메시지 전달
                if (error.name === 'SequelizeConnectionError') {
                   return done(null, false, { message: '데이터베이스 연결 오류' })

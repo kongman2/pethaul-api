@@ -8,11 +8,40 @@ const { isLoggedIn, isNotLoggedIn } = require('./middlewares')
 
 const router = express.Router()
 
+const normalizePhoneDigits = (value) => {
+   if (typeof value !== 'string') return null
+   const digits = value.replace(/\D/g, '')
+   return digits.length ? digits : null
+}
+
+const normalizeString = (value) => {
+   if (typeof value !== 'string') return null
+   const trimmed = value.trim()
+   return trimmed.length ? trimmed : null
+}
+
 // 회원가입
 router.post('/join', isNotLoggedIn, async (req, res, next) => {
-   const { email, password, name, userId, address, gender, phoneNumber } = req.body
+   const {
+      email,
+      password,
+      name,
+      userId,
+      address,
+      addressDetail,
+      gender,
+      phoneNumber,
+      defaultDeliveryName,
+      defaultDeliveryPhone,
+      defaultDeliveryAddress,
+      defaultDeliveryRequest,
+      defaultDeliveryAddressDetail,
+   } = req.body
 
    try {
+      const normalizedPhoneNumber = normalizePhoneDigits(phoneNumber)
+      const normalizedDefaultPhone = normalizePhoneDigits(defaultDeliveryPhone)
+
       // 이메일 중복 확인
       const exUser = await User.findOne({ where: { email } })
       if (exUser) {
@@ -22,8 +51,8 @@ router.post('/join', isNotLoggedIn, async (req, res, next) => {
       }
 
       // 전화번호가 온 경우에만 중복 확인 (null 허용)
-      if (phoneNumber) {
-         const exPhone = await User.findOne({ where: { phoneNumber } })
+      if (normalizedPhoneNumber) {
+         const exPhone = await User.findOne({ where: { phoneNumber: normalizedPhoneNumber } })
          if (exPhone) {
             const err = new Error('이미 사용 중인 전화번호입니다.')
             err.status = 409
@@ -39,9 +68,15 @@ router.post('/join', isNotLoggedIn, async (req, res, next) => {
          email,
          password: hashed,
          name,
-         address,
+         address: normalizeString(address),
+         addressDetail: normalizeString(addressDetail),
          gender,
-         phoneNumber,
+         phoneNumber: normalizedPhoneNumber,
+         defaultDeliveryName: normalizeString(defaultDeliveryName),
+         defaultDeliveryPhone: normalizedDefaultPhone,
+         defaultDeliveryAddress: normalizeString(defaultDeliveryAddress),
+         defaultDeliveryRequest: normalizeString(defaultDeliveryRequest),
+         defaultDeliveryAddressDetail: normalizeString(defaultDeliveryAddressDetail),
       })
 
       return res.status(201).json({ success: true, message: '회원가입 성공' })
@@ -94,7 +129,6 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
 
       req.login(user, async (loginError) => {
          if (loginError) {
-            console.error(loginError)
             return next(loginError)
          }
 
@@ -126,6 +160,12 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
                provider: user.provider,
                phoneNumber: user.phoneNumber, // ✅ 추가
                address: user.address,
+            addressDetail: user.addressDetail,
+               defaultDeliveryName: user.defaultDeliveryName,
+               defaultDeliveryPhone: user.defaultDeliveryPhone,
+               defaultDeliveryAddress: user.defaultDeliveryAddress,
+               defaultDeliveryRequest: user.defaultDeliveryRequest,
+            defaultDeliveryAddressDetail: user.defaultDeliveryAddressDetail,
             },
          })
       })
@@ -158,6 +198,12 @@ router.get('/check', (req, res) => {
             provider: req.user.provider,
             phoneNumber: req.user.phoneNumber, // ✅ 추가
             address: req.user.address,
+            addressDetail: req.user.addressDetail,
+            defaultDeliveryName: req.user.defaultDeliveryName,
+            defaultDeliveryPhone: req.user.defaultDeliveryPhone,
+            defaultDeliveryAddress: req.user.defaultDeliveryAddress,
+            defaultDeliveryRequest: req.user.defaultDeliveryRequest,
+            defaultDeliveryAddressDetail: req.user.defaultDeliveryAddressDetail,
          },
       })
    }
@@ -249,7 +295,19 @@ router.post('/updatepw', isNotLoggedIn, async (req, res, next) => {
 //회원 정보 수정
 router.put('/', isLoggedIn, async (req, res, next) => {
    try {
-      const { name, email, phoneNumber, address, newPassword } = req.body
+      const {
+         name,
+         email,
+         phoneNumber,
+         address,
+      addressDetail,
+         newPassword,
+         defaultDeliveryName,
+         defaultDeliveryPhone,
+         defaultDeliveryAddress,
+         defaultDeliveryRequest,
+      defaultDeliveryAddressDetail,
+      } = req.body
       const user = await User.findByPk(req.user.id)
       if (!user) {
          return res.status(404).json({ message: '회원 정보를 찾을 수 없습니다.' })
@@ -257,8 +315,28 @@ router.put('/', isLoggedIn, async (req, res, next) => {
 
       user.name = name
       user.email = email
-      if (phoneNumber) user.phoneNumber = phoneNumber
-      if (address) user.address = address
+      if (phoneNumber !== undefined) {
+         user.phoneNumber = normalizePhoneDigits(phoneNumber)
+      }
+      if (address !== undefined) user.address = normalizeString(address)
+      if (addressDetail !== undefined) user.addressDetail = normalizeString(addressDetail)
+
+      if (defaultDeliveryName !== undefined) {
+         user.defaultDeliveryName = normalizeString(defaultDeliveryName)
+      }
+      if (defaultDeliveryPhone !== undefined) {
+         user.defaultDeliveryPhone = normalizePhoneDigits(defaultDeliveryPhone)
+      }
+      if (defaultDeliveryAddress !== undefined) {
+         user.defaultDeliveryAddress = normalizeString(defaultDeliveryAddress)
+      }
+      if (defaultDeliveryRequest !== undefined) {
+         user.defaultDeliveryRequest = normalizeString(defaultDeliveryRequest)
+      }
+      if (defaultDeliveryAddressDetail !== undefined) {
+         user.defaultDeliveryAddressDetail = normalizeString(defaultDeliveryAddressDetail)
+      }
+
       if (newPassword) user.password = await bcrypt.hash(newPassword, 12)
 
       await user.save()
@@ -271,6 +349,12 @@ router.put('/', isLoggedIn, async (req, res, next) => {
             email: user.email,
             phoneNumber: user.phoneNumber,
             address: user.address,
+            addressDetail: user.addressDetail,
+            defaultDeliveryName: user.defaultDeliveryName,
+            defaultDeliveryPhone: user.defaultDeliveryPhone,
+            defaultDeliveryAddress: user.defaultDeliveryAddress,
+            defaultDeliveryRequest: user.defaultDeliveryRequest,
+            defaultDeliveryAddressDetail: user.defaultDeliveryAddressDetail,
          },
       })
    } catch (error) {

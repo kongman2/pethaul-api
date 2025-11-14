@@ -82,5 +82,6 @@ module.exports = class Item extends Sequelize.Model {
          as: 'Orders',
       })
       Item.hasMany(db.Like, { foreignKey: 'itemId', sourceKey: 'id', onDelete: 'CASCADE' })
+      Item.hasMany(db.Qna, { foreignKey: 'itemId', sourceKey: 'id', onDelete: 'CASCADE' })
    }
 }

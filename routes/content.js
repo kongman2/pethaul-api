@@ -14,7 +14,6 @@ const UPLOAD_DIR = path.join(__dirname, '..', 'uploads')
 try {
    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 } catch (e) {
-   console.error('[content] uploads 디렉토리 생성 실패:', e)
 }
 
 const storage = multer.diskStorage({
@@ -59,7 +58,21 @@ router.get('/', async (req, res, next) => {
       const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1
       const size = Number.isFinite(sizeRaw) ? Math.min(Math.max(sizeRaw, 1), 50) : 10
 
-      const where = { status: 'published' }
+      // 관리자 체크 (req.user가 있고 role이 ADMIN인 경우)
+      const isAdmin = req.user && (req.user.role === 'ADMIN' || req.user.role === 'admin')
+      
+      const where = {}
+      
+      // status 필터: 관리자는 all/published/draft 선택 가능, 일반 사용자는 published만
+      const statusParam = (req.query.status || '').trim()
+      if (isAdmin) {
+         if (statusParam === 'published' || statusParam === 'draft') {
+            where.status = statusParam
+         }
+         // status가 'all'이거나 없으면 where에 status 조건을 추가하지 않음 (모든 상태 조회)
+      } else {
+         where.status = 'published' // 일반 사용자는 항상 published만
+      }
 
       const tag = (req.query.tag || '').trim()
       if (tag) where.tag = tag

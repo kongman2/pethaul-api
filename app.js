@@ -21,6 +21,7 @@ const petRouter = require('./routes/pet')
 const likeRouter = require('./routes/like')
 const contentRouter = require('./routes/content')
 const qnaRouter = require('./routes/qna')
+const exchangeReturnRouter = require('./routes/exchangeReturn')
 const { sequelize } = require('./models')
 const passportConfig = require('./passport')
 
@@ -28,20 +29,28 @@ const app = express()
 passportConfig()
 
 // If behind a proxy (nginx/render/heroku), uncomment:
-// app.set('trust proxy', 1)
+app.set('trust proxy', 1)
 
 // Port
 app.set('port', process.env.PORT || 8002)
 
-// DB
-sequelize
-   .sync({ force: false, alter: false })
-   .then(() => {
-      console.log(' 🛠 데이터베이스 연결 성공')
-   })
-   .catch((err) => {
-      console.error(err)
-   })
+// DB 연결 테스트 및 동기화
+async function connectDB() {
+   try {
+      // 먼저 연결 테스트
+      await sequelize.authenticate()
+      await sequelize.sync({ force: false, alter: false })
+   } catch (err) {
+      if (err.original && err.original.code === 'ER_BAD_DB_ERROR') {
+         console.error(`데이터베이스가 존재하지 않습니다: ${process.env.DB_NAME}`)
+      } else {
+         console.error('데이터베이스 연결 실패:', err.message)
+      }
+      process.exit(1) // 서버 시작 실패 시 종료
+   }
+}
+
+connectDB()
 
 // Middleware
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
@@ -105,6 +114,7 @@ app.use('/pets', petRouter)
 app.use('/like', likeRouter)
 app.use('/contents', contentRouter)
 app.use('/qna', qnaRouter)
+app.use('/exchange-return', exchangeReturnRouter)
 
 // 404 handler
 app.use((req, res, next) => {
@@ -118,11 +128,9 @@ app.use((err, req, res, next) => {
    const statusCode = err.status || 500
    const errorMessage = err.message || '서버 내부 오류'
    if (process.env.NODE_ENV === 'development') {
-      console.log(err)
    }
    res.status(statusCode).json({ success: false, message: errorMessage, error: err })
 })
 
 app.listen(app.get('port'), () => {
-   console.log(app.get('port'), '번 포트에서 대기중')
 })

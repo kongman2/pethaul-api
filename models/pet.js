@@ -30,6 +30,16 @@ module.exports = class Pet extends Sequelize.Model {
                   min: 0,
                },
             },
+            ageInMonths: {
+               type: Sequelize.INTEGER.UNSIGNED,
+               allowNull: true,
+               comment: '1살 미만인 경우 개월 수 (1-11)',
+            },
+            surveyResult: {
+               type: Sequelize.JSON,
+               allowNull: true,
+               comment: '반려동물 설문조사 결과 데이터',
+            },
          },
          {
             sequelize,
