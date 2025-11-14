@@ -1,0 +1,23 @@
+services:
+  # 백엔드 API 서버
+  - type: web
+    name: pethaul-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_DIALECT
+        value: mysql
+      - key: DEPLOY_DB_DIALECT
+        value: mysql
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: FRONTEND_APP_URL
+        sync: false  # 프론트엔드 URL로 업데이트 필요
+    healthCheckPath: /
+
