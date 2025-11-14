@@ -16,8 +16,8 @@ services:
       - key: DEPLOY_DB_DIALECT
         value: mysql
       - key: COOKIE_SECRET
-        generateValue: true
+        sync: false  # 수동으로 랜덤 문자열 설정 필요
       - key: FRONTEND_APP_URL
-        sync: false  # 프론트엔드 URL로 업데이트 필요
+        sync: false  # Blueprint 생성 시 수동으로 프론트엔드 URL 입력
     healthCheckPath: /
 

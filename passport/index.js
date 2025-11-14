@@ -21,6 +21,10 @@ module.exports = () => {
 
    // 로컬 로그인 전략 설정
    local()
-   // 구글 로그인 전략 설정
-   google()
+   // 구글 로그인 전략 설정 (환경 변수가 있을 때만)
+   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      google()
+   } else {
+      console.log('⚠️ Google OAuth 환경 변수가 설정되지 않아 Google 로그인을 사용할 수 없습니다.')
+   }
 }

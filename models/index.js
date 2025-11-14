@@ -5,7 +5,22 @@ const config = require('../config/config')[env]
 
 // 환경 변수 검증
 if (!config.database || !config.username || !config.host) {
-   console.error('데이터베이스 설정이 누락되었습니다. 필요한 환경 변수: DB_NAME, DB_USERNAME, DB_HOST, DB_PASSWORD')
+   if (env === 'production') {
+      console.error('❌ 데이터베이스 설정이 누락되었습니다.')
+      console.error('프로덕션 환경에서는 다음 환경 변수가 필요합니다:')
+      console.error('  - DEPLOY_DB_USERNAME')
+      console.error('  - DEPLOY_DB_PASSWORD')
+      console.error('  - DEPLOY_DB_NAME')
+      console.error('  - DEPLOY_DB_HOST')
+      console.error('  - DEPLOY_DB_DIALECT (선택사항, 기본값: mysql)')
+      console.error('현재 설정된 값:')
+      console.error('  - DEPLOY_DB_USERNAME:', process.env.DEPLOY_DB_USERNAME ? '설정됨' : '❌ 미설정')
+      console.error('  - DEPLOY_DB_PASSWORD:', process.env.DEPLOY_DB_PASSWORD ? '설정됨' : '❌ 미설정')
+      console.error('  - DEPLOY_DB_NAME:', process.env.DEPLOY_DB_NAME || '❌ 미설정')
+      console.error('  - DEPLOY_DB_HOST:', process.env.DEPLOY_DB_HOST || '❌ 미설정')
+   } else {
+      console.error('데이터베이스 설정이 누락되었습니다. 필요한 환경 변수: DB_NAME, DB_USERNAME, DB_HOST, DB_PASSWORD')
+   }
 }
 
 const User = require('./user')
