@@ -50,7 +50,25 @@ module.exports = {
       username: process.env.DEPLOY_DB_USERNAME,
       password: process.env.DEPLOY_DB_PASSWORD,
       database: process.env.DEPLOY_DB_NAME,
-      host: process.env.DEPLOY_DB_HOST,
+      // 호스트와 포트 분리 처리
+      host: (() => {
+         const host = process.env.DEPLOY_DB_HOST || ''
+         // 포트가 포함되어 있으면 분리
+         if (host.includes(':')) {
+            return host.split(':')[0]
+         }
+         return host
+      })(),
+      port: (() => {
+         const host = process.env.DEPLOY_DB_HOST || ''
+         // 포트가 포함되어 있으면 추출
+         if (host.includes(':')) {
+            const port = host.split(':')[1]
+            return port ? parseInt(port, 10) : 3306
+         }
+         // 별도 포트 환경 변수 확인
+         return process.env.DEPLOY_DB_PORT ? parseInt(process.env.DEPLOY_DB_PORT, 10) : 3306
+      })(),
       dialect: process.env.DEPLOY_DB_DIALECT || 'mysql',
       logging: false, // 로그 숨기기
       timezone: '+09:00', // KST로 설정
