@@ -6,6 +6,8 @@ const passport = require('passport')
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
+const https = require('https')
+const { URL } = require('url')
 const { User } = require('../models')
 const { isLoggedIn, isNotLoggedIn, authenticateToken, isAdmin } = require('./middlewares')
 
@@ -300,42 +302,63 @@ router.get('/check', (req, res) => {
    return res.status(200).json({ isAuthenticated: false })
 })
 
-// ✅ 구글 로그인 시작
-router.get('/google', (req, res, next) => {
-   console.log('🔍 Google OAuth 시작 요청:', {
-      timestamp: new Date().toISOString(),
-      headers: {
-         origin: req.headers.origin,
-         referer: req.headers.referer,
-         userAgent: req.headers['user-agent'],
-      },
-      hasGoogleStrategy: !!passport._strategies?.google,
-   })
-   
-   // Google Strategy가 등록되어 있는지 확인
-   if (!passport._strategies?.google) {
-      console.error('❌ Google OAuth Strategy가 등록되지 않았습니다.')
+// ✅ 구글 로그인 시작 - Google OAuth 2.0 직접 구현
+router.get('/google', (req, res) => {
+   try {
+      // 환경 변수 확인
+      if (!process.env.GOOGLE_CLIENT_ID) {
+         console.error('❌ GOOGLE_CLIENT_ID 환경 변수가 설정되지 않았습니다.')
+         const isDevelopment = process.env.NODE_ENV !== 'production'
+         const clientUrl = isDevelopment
+            ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+         return res.redirect(`${clientUrl}/login?error=google_config_error`)
+      }
+      
+      // Callback URL 구성
+      const callbackURL = process.env.GOOGLE_CALLBACK_URL || 
+         (process.env.NODE_ENV === 'production' 
+            ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+            : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`)
+      
+      // Google OAuth 2.0 인증 URL 생성
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+      authUrl.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID)
+      authUrl.searchParams.set('redirect_uri', callbackURL)
+      authUrl.searchParams.set('response_type', 'code')
+      authUrl.searchParams.set('scope', 'profile email')
+      authUrl.searchParams.set('access_type', 'offline')
+      authUrl.searchParams.set('prompt', 'consent')
+      
+      console.log('✅ Google OAuth 리다이렉트:', {
+         callbackURL,
+         clientId: process.env.GOOGLE_CLIENT_ID.substring(0, 10) + '...',
+      })
+      
+      res.redirect(authUrl.toString())
+   } catch (error) {
+      console.error('❌ Google OAuth 시작 오류:', error)
       const isDevelopment = process.env.NODE_ENV !== 'production'
       const clientUrl = isDevelopment
          ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
          : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-      return res.redirect(`${clientUrl}/login?error=google_strategy_not_found`)
+      res.redirect(`${clientUrl}/login?error=google_auth_failed`)
    }
-   
-   passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next)
 })
 
-// ✅ 구글 로그인 콜백 처리
-router.get(
-   '/google/callback',
-   (req, res, next) => {
+// ✅ 구글 로그인 콜백 처리 - Google OAuth 2.0 직접 구현 (실무 표준 방식)
+router.get('/google/callback', async (req, res) => {
+   const isDevelopment = process.env.NODE_ENV !== 'production'
+   const clientUrl = isDevelopment
+      ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+      : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+   
+   try {
       console.log('🔍 Google OAuth 콜백 시작:', {
-         query: req.query,
          hasCode: !!req.query.code,
          hasError: !!req.query.error,
          error: req.query.error,
          errorDescription: req.query.error_description,
-         code: req.query.code ? `${req.query.code.substring(0, 20)}...` : null,
       })
       
       // Google에서 에러를 반환한 경우
@@ -343,366 +366,234 @@ router.get(
          console.error('❌ Google OAuth 에러 응답:', {
             error: req.query.error,
             errorDescription: req.query.error_description,
-            errorUri: req.query.error_uri,
          })
          
-         // 특정 에러에 대한 재시도 로직
          if (req.query.error === 'access_denied') {
-            // 사용자가 권한을 거부한 경우
-            const isDevelopment = process.env.NODE_ENV !== 'production'
-            const clientUrl = isDevelopment
-               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
             return res.redirect(`${clientUrl}/login?error=access_denied`)
          }
+         return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
       // code가 없으면 에러
       if (!req.query.code) {
-         console.error('❌ Google OAuth code 없음:', { query: req.query })
-         const isDevelopment = process.env.NODE_ENV !== 'production'
-         const clientUrl = isDevelopment
-            ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+         console.error('❌ Google OAuth code 없음')
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
-      // Google Strategy가 등록되어 있는지 확인
-      if (!passport._strategies?.google) {
-         console.error('❌ Google OAuth Strategy가 등록되지 않았습니다. (콜백 단계)')
-         const isDevelopment = process.env.NODE_ENV !== 'production'
-         const clientUrl = isDevelopment
-            ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-         return res.redirect(`${clientUrl}/login?error=google_strategy_not_found`)
+      // 환경 변수 확인
+      if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+         console.error('❌ Google OAuth 환경 변수가 설정되지 않았습니다.')
+         return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
-      console.log('🔍 passport.authenticate 호출 전:', {
-         hasCode: !!req.query.code,
-         codeLength: req.query.code?.length,
-         hasGoogleStrategy: !!passport._strategies?.google,
-         callbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+      // Callback URL 구성
+      const callbackURL = process.env.GOOGLE_CALLBACK_URL || 
+         (process.env.NODE_ENV === 'production' 
             ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
-            : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+            : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`)
+      
+      // 1단계: code를 access_token으로 교환
+      console.log('🔄 Google OAuth 토큰 교환 시작...')
+      const tokenResponse = await new Promise((resolve, reject) => {
+         const postData = new URLSearchParams({
+            code: req.query.code,
+            client_id: process.env.GOOGLE_CLIENT_ID,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET,
+            redirect_uri: callbackURL,
+            grant_type: 'authorization_code',
+         }).toString()
+         
+         const options = {
+            hostname: 'oauth2.googleapis.com',
+            path: '/token',
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/x-www-form-urlencoded',
+               'Content-Length': Buffer.byteLength(postData),
+            },
+         }
+         
+         const reqToken = https.request(options, (resToken) => {
+            let data = ''
+            resToken.on('data', (chunk) => { data += chunk })
+            resToken.on('end', () => {
+               try {
+                  const parsed = JSON.parse(data)
+                  if (resToken.statusCode === 200) {
+                     resolve(parsed)
+                  } else {
+                     console.error('❌ Google 토큰 교환 실패:', {
+                        statusCode: resToken.statusCode,
+                        response: parsed,
+                     })
+                     reject(new Error(parsed.error_description || parsed.error || 'Token exchange failed'))
+                  }
+               } catch (err) {
+                  reject(err)
+               }
+            })
+         })
+         
+         reqToken.on('error', (err) => {
+            console.error('❌ Google 토큰 교환 네트워크 오류:', err)
+            reject(err)
+         })
+         
+         reqToken.write(postData)
+         reqToken.end()
       })
       
-      passport.authenticate('google', (err, user, info) => {
-         console.log('🔍 passport.authenticate 콜백:', {
-            hasError: !!err,
-            errorMessage: err?.message,
-            errorCode: err?.code,
-            hasUser: !!user,
-            userType: user ? typeof user : null,
-            userId: user?.id,
-            userEmail: user?.email,
-            hasInfo: !!info,
-            info: info,
-            infoType: typeof info,
-            infoKeys: info ? Object.keys(info) : null,
-            infoMessage: info?.message,
-         })
-         
-         if (err) {
-            console.error('❌ Google OAuth 인증 오류 상세:', {
-               message: err.message,
-               stack: err.stack,
-               name: err.name,
-               code: err.code,
-               statusCode: err.statusCode,
-               info: info,
-               // Google OAuth 특정 에러 코드 확인
-               isRedirectUriMismatch: err.message?.includes('redirect_uri_mismatch') || err.message?.includes('redirect_uri'),
-               isInvalidClient: err.message?.includes('invalid_client'),
-               isInvalidGrant: err.message?.includes('invalid_grant'),
-            })
-            
-            // redirect_uri_mismatch 에러인 경우 상세 로그
-            if (err.message?.includes('redirect_uri_mismatch') || err.message?.includes('redirect_uri')) {
-               console.error('❌ Redirect URI 불일치 오류:', {
-                  expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
-                     ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
-                     : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
-                  message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
-               })
-            }
-            
-            const isDevelopment = process.env.NODE_ENV !== 'production'
-            const clientUrl = isDevelopment
-               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-            return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+      const { access_token } = tokenResponse
+      if (!access_token) {
+         console.error('❌ access_token이 없습니다:', tokenResponse)
+         return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+      }
+      
+      console.log('✅ Google OAuth 토큰 교환 성공')
+      
+      // 2단계: access_token으로 사용자 정보 가져오기
+      console.log('🔄 Google 사용자 정보 가져오기 시작...')
+      const userInfo = await new Promise((resolve, reject) => {
+         const options = {
+            hostname: 'www.googleapis.com',
+            path: '/oauth2/v2/userinfo',
+            method: 'GET',
+            headers: {
+               'Authorization': `Bearer ${access_token}`,
+            },
          }
          
-         if (!user) {
-            console.error('❌ Google OAuth 인증 실패: 사용자 정보 없음', {
-               hasError: !!err,
-               errorMessage: err?.message,
-               info: info,
-               hasInfo: !!info,
-               infoType: typeof info,
-               infoKeys: info ? Object.keys(info) : null,
-               infoMessage: info?.message,
-               infoCode: info?.code,
-               infoString: info ? JSON.stringify(info, null, 2) : null,
-               // info가 문자열인 경우도 처리
-               infoStringValue: typeof info === 'string' ? info : null,
-            })
-            
-            // info에 에러 정보가 있는 경우
-            if (info) {
-               if (typeof info === 'object') {
-                  console.error('❌ Google OAuth info 오류 상세 (객체):', {
-                     message: info.message,
-                     code: info.code,
-                     statusCode: info.statusCode,
-                     allKeys: Object.keys(info),
-                     fullInfo: JSON.stringify(info, null, 2),
-                  })
-                  
-                  // 특정 에러 코드에 대한 처리
-                  if (info.code === 'EAUTH' || info.message?.includes('redirect_uri_mismatch')) {
-                     console.error('❌ Redirect URI 불일치 감지:', {
-                        expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
-                           ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
-                           : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
-                        message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
+         https.get(options, (resUserInfo) => {
+            let data = ''
+            resUserInfo.on('data', (chunk) => { data += chunk })
+            resUserInfo.on('end', () => {
+               try {
+                  const parsed = JSON.parse(data)
+                  if (resUserInfo.statusCode === 200) {
+                     resolve(parsed)
+                  } else {
+                     console.error('❌ Google 사용자 정보 가져오기 실패:', {
+                        statusCode: resUserInfo.statusCode,
+                        response: parsed,
                      })
+                     reject(new Error(parsed.error?.message || 'Failed to get user info'))
                   }
-               } else if (typeof info === 'string') {
-                  console.error('❌ Google OAuth info 오류 상세 (문자열):', info)
+               } catch (err) {
+                  reject(err)
                }
-            }
-            
-            // Strategy verify callback이 호출되지 않았을 가능성
-            console.error('⚠️ Google OAuth Strategy verify callback이 호출되지 않았을 수 있습니다.')
-            console.error('⚠️ 가능한 원인:')
-            console.error('   1. Google API 토큰 교환 실패 (invalid_grant, invalid_client 등)')
-            console.error('   2. Redirect URI 불일치')
-            console.error('   3. Client ID/Secret 오류')
-            console.error('   4. 네트워크 오류')
-            
-            // 에러 원인을 URL 파라미터로 전달 (디버깅용)
-            let errorParam = 'google_auth_failed'
-            if (info) {
-               if (typeof info === 'object') {
-                  if (info.code === 'EAUTH' || info.message?.includes('redirect_uri')) {
-                     errorParam = 'google_auth_failed:redirect_uri_mismatch'
-                  } else if (info.message?.includes('invalid_client')) {
-                     errorParam = 'google_auth_failed:invalid_client'
-                  } else if (info.message?.includes('invalid_grant')) {
-                     errorParam = 'google_auth_failed:invalid_grant'
-                  }
-               } else if (typeof info === 'string' && info.includes('redirect_uri')) {
-                  errorParam = 'google_auth_failed:redirect_uri_mismatch'
-               }
-            }
-            
-            const isDevelopment = process.env.NODE_ENV !== 'production'
-            const clientUrl = isDevelopment
-               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-            return res.redirect(`${clientUrl}/login?error=${errorParam}`)
-         }
-         
-         console.log('✅ Google OAuth 인증 성공, 세션 로그인 시도:', { userId: user.id, email: user.email })
-         
-         // 로그인 성공
-         req.logIn(user, { session: true }, (loginErr) => {
-            if (loginErr) {
-               console.error('❌ 세션 로그인 오류:', {
-                  message: loginErr.message,
-                  stack: loginErr.stack,
-                  name: loginErr.name,
-               })
-               
-               // 세션 로그인 실패 시에도 재시도
-               console.log('🔄 세션 로그인 재시도...')
-               setTimeout(() => {
-                  req.logIn(user, { session: true }, (retryErr) => {
-                     if (retryErr) {
-                        console.error('❌ 세션 로그인 재시도 실패:', retryErr.message)
-                        const isDevelopment = process.env.NODE_ENV !== 'production'
-                        const clientUrl = isDevelopment
-                           ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-                           : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-                        return res.redirect(`${clientUrl}/login?error=session_failed`)
-                     }
-                     console.log('✅ 세션 로그인 재시도 성공')
-                     next()
-                  })
-               }, 200)
-               return
-            }
-            
-            console.log('✅ 세션 로그인 성공:', {
-               isAuthenticated: req.isAuthenticated(),
-               hasUser: !!req.user,
-               userId: req.user?.id,
             })
-            
-            // req.user가 아직 설정되지 않았을 수 있으므로 재시도
-            if (!req.user) {
-               console.log('⚠️ req.user 없음, 대기 후 재시도...')
-               let retryCount = 0
-               const checkUser = setInterval(() => {
-                  retryCount++
-                  if (req.user || retryCount >= 5) {
-                     clearInterval(checkUser)
-                     if (req.user) {
-                        console.log('✅ req.user 복원 성공:', { userId: req.user.id })
-                     } else {
-                        console.warn('⚠️ req.user 복원 실패, 계속 진행')
-                     }
-                     next()
-                  }
-               }, 200)
-            } else {
-               next()
-            }
+         }).on('error', (err) => {
+            console.error('❌ Google 사용자 정보 네트워크 오류:', err)
+            reject(err)
          })
-      })(req, res, next)
-   },
-   async (req, res) => {
-      try {
-         console.log('🔍 Google OAuth 콜백 핸들러 시작:', {
-            isAuthenticated: req.isAuthenticated(),
-            hasUser: !!req.user,
-            userId: req.user?.id,
-            userEmail: req.user?.email,
-         })
+      })
+      
+      if (!userInfo.email) {
+         console.error('❌ Google 사용자 정보에 이메일이 없습니다:', userInfo)
+         return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+      }
+      
+      console.log('✅ Google 사용자 정보 가져오기 성공:', {
+         email: userInfo.email,
+         name: userInfo.name,
+         id: userInfo.id,
+      })
+      
+      // 3단계: 사용자 조회 또는 생성
+      let user = await User.findOne({
+         where: { email: userInfo.email },
+      })
+      
+      if (user) {
+         // 기존 사용자
+         console.log('✅ 기존 사용자 로그인:', { userId: user.id, email: user.email })
          
-         // req.user가 없으면 세션이 아직 설정되지 않았을 수 있음 - 대기
-         if (!req.user) {
-            console.warn('⚠️ req.user가 없음, 세션 설정 대기 중...')
-            for (let attempt = 0; attempt < 5; attempt++) {
-               await new Promise(resolve => setTimeout(resolve, 200))
-               if (req.user) {
-                  console.log('✅ req.user 복원 성공:', { userId: req.user.id })
-                  break
-               }
-            }
-            
-            if (!req.user) {
-               console.error('❌ req.user 복원 실패')
-               const isDevelopment = process.env.NODE_ENV !== 'production'
-               const clientUrl = isDevelopment
-                  ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-                  : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-               return res.redirect(`${clientUrl}/login?error=session_failed`)
-            }
+         // provider 업데이트
+         if (user.provider !== 'google') {
+            await user.update({ provider: 'google' })
+            user = await User.findOne({ where: { id: user.id } })
+         }
+      } else {
+         // 새 사용자 생성
+         console.log('📝 새 사용자 생성 시작:', { email: userInfo.email, name: userInfo.name })
+         
+         let userId = `google_${userInfo.id}`
+         let existingUserWithId = await User.findOne({ where: { userId } })
+         let counter = 1
+         while (existingUserWithId) {
+            userId = `google_${userInfo.id}_${counter}`
+            existingUserWithId = await User.findOne({ where: { userId } })
+            counter++
          }
          
-         // 구글 로그인 성공 후 JWT 토큰 자동 발급
+         user = await User.create({
+            userId: userId,
+            name: userInfo.name || userInfo.given_name || 'Google User',
+            email: userInfo.email,
+            password: null,
+            provider: 'google',
+         })
+         
+         console.log('✅ 새 사용자 생성 완료:', { userId: user.id, email: user.email })
+      }
+      
+      // 4단계: 세션 로그인
+      req.logIn(user, { session: true }, async (loginErr) => {
+         if (loginErr) {
+            console.error('❌ 세션 로그인 오류:', loginErr)
+            return res.redirect(`${clientUrl}/login?error=session_failed`)
+         }
+         
+         console.log('✅ 세션 로그인 성공:', { userId: user.id, email: user.email })
+         
+         // 5단계: JWT 토큰 발급
          let token = null
          try {
-            // 1. req.user 확인
-            if (!req.user) {
-               console.warn('⚠️ 구글 로그인 토큰 발급 실패: req.user가 없습니다.')
-            } else if (!req.user.id) {
-               console.warn('⚠️ 구글 로그인 토큰 발급 실패: req.user.id가 없습니다.', { user: req.user })
-            } else if (!process.env.JWT_SECRET) {
-               console.warn('⚠️ 구글 로그인 토큰 발급 실패: JWT_SECRET 환경변수가 설정되지 않았습니다.')
-            } else {
+            if (process.env.JWT_SECRET && user.id) {
                const jwt = require('jsonwebtoken')
                const { Domain } = require('../models')
                const origin = req.get('origin') || req.headers.host || 'unknown'
                
-               // 2. JWT 토큰 생성
-               try {
-                  token = jwt.sign({ id: req.user.id, email: req.user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
-                  console.log('✅ 구글 로그인 JWT 토큰 생성 성공:', { userId: req.user.id, origin })
-               } catch (jwtError) {
-                  console.error('❌ 구글 로그인 JWT 토큰 생성 실패:', jwtError.message)
-                  throw jwtError
+               token = jwt.sign(
+                  { id: user.id, email: user.email || '' },
+                  process.env.JWT_SECRET,
+                  { expiresIn: '365d', issuer: 'pethaul' }
+               )
+               
+               // DB에 토큰 저장
+               const [row] = await Domain.findOrCreate({
+                  where: { userId: user.id, host: origin },
+                  defaults: { clientToken: token },
+               })
+               if (!row.isNewRecord) {
+                  row.clientToken = token
+                  await row.save()
                }
                
-               // 3. DB에 토큰 저장
-               try {
-                  const [row, created] = await Domain.findOrCreate({
-                     where: { userId: req.user.id, host: origin },
-                     defaults: { clientToken: token },
-                  })
-                  if (!created) {
-                     row.clientToken = token
-                     await row.save()
-                  }
-                  console.log('✅ 구글 로그인 토큰 DB 저장 성공:', { userId: req.user.id, origin, created })
-               } catch (dbError) {
-                  console.error('❌ 구글 로그인 토큰 DB 저장 실패:', dbError.message)
-                  console.error('DB 오류 상세:', {
-                     userId: req.user.id,
-                     origin,
-                     error: dbError.name,
-                     message: dbError.message,
-                  })
-                  // DB 저장 실패해도 토큰은 생성되었으므로 반환 가능
-               }
+               console.log('✅ JWT 토큰 발급 완료:', { userId: user.id })
             }
          } catch (tokenError) {
+            console.error('❌ JWT 토큰 발급 실패:', tokenError.message)
             // 토큰 발급 실패해도 로그인은 성공으로 처리
-            console.error('❌ 구글 로그인 토큰 자동 발급 실패:', {
-               message: tokenError.message,
-               stack: tokenError.stack,
-               userId: req.user?.id,
-               hasJWTSecret: !!process.env.JWT_SECRET,
-            })
-         }
-
-         // 개발 환경과 프로덕션 환경 구분
-         const isDevelopment = process.env.NODE_ENV !== 'production'
-         let clientUrl
-         
-         if (isDevelopment) {
-            // 개발 환경: localhost 사용
-            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173'
-         } else {
-            // 프로덕션: 환경 변수 필수, 없으면 기본값 사용
-            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL
-            if (!clientUrl) {
-               console.warn('⚠️ 프로덕션 환경에서 CLIENT_URL 또는 FRONTEND_APP_URL이 설정되지 않았습니다. 기본값 사용.')
-               clientUrl = 'https://pethaul-frontend.onrender.com'
-            }
          }
          
-         // 토큰이 있으면 URL 파라미터로 전달
+         // 6단계: 프론트엔드로 리다이렉트
          const redirectUrl = token 
             ? `${clientUrl}/google-success?token=${encodeURIComponent(token)}`
             : `${clientUrl}/google-success`
          
-         console.log('✅ 구글 로그인 성공, 리다이렉트:', redirectUrl, { 
-            isDevelopment, 
-            hasToken: !!token, 
-            userId: req.user?.id,
-            clientUrl,
-            envVars: {
-               CLIENT_URL: process.env.CLIENT_URL || '미설정',
-               FRONTEND_APP_URL: process.env.FRONTEND_APP_URL || '미설정',
-               NODE_ENV: process.env.NODE_ENV || '미설정'
-            }
-         })
-      // 로그인 성공 시 프론트로 리다이렉트
+         console.log('✅ Google 로그인 성공, 리다이렉트:', redirectUrl)
          return res.redirect(redirectUrl)
-      } catch (error) {
-         console.error('구글 로그인 콜백 오류:', error)
-         // 에러 발생 시에도 리다이렉트 (로그인은 성공했을 수 있음)
-         const isDevelopment = process.env.NODE_ENV !== 'production'
-         let clientUrl
-         
-         if (isDevelopment) {
-            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173'
-         } else {
-            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL
-            if (!clientUrl) {
-               console.warn('⚠️ 프로덕션 환경에서 CLIENT_URL 또는 FRONTEND_APP_URL이 설정되지 않았습니다. 기본값 사용.')
-               clientUrl = 'https://pethaul-frontend.onrender.com'
-            }
-         }
-         
-         console.log('⚠️ 구글 로그인 콜백 오류 후 리다이렉트:', `${clientUrl}/google-success`, { isDevelopment, clientUrl })
-         return res.redirect(`${clientUrl}/google-success`)
-      }
+      })
+   } catch (error) {
+      console.error('❌ Google OAuth 콜백 오류:', {
+         message: error.message,
+         stack: error.stack,
+         name: error.name,
+      })
+      return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
    }
-)
+})
 
 // ✅ 구글 로그인 상태 체크
 router.get('/googlecheck', (req, res) => {
