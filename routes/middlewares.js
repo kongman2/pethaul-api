@@ -3,9 +3,30 @@ const jwt = require('jsonwebtoken')
 const { User } = require('../models')
 
 // 로그인 상태 확인 미들웨어: 사용자가 로그인된 상태인지 확인 (세션 기반)
-exports.isLoggedIn = (req, res, next) => {
+exports.isLoggedIn = async (req, res, next) => {
+   // req.isAuthenticated()가 true여도 req.user가 아직 설정되지 않았을 수 있음
+   // Passport의 deserializeUser가 비동기로 실행되므로 대기 필요
    if (req.isAuthenticated()) {
-      next() // 로그인이 됐으면 다음 미들웨어로 이동
+      // req.user가 없으면 세션이 아직 완전히 복원되지 않은 것
+      // deserializeUser가 완료될 때까지 짧은 대기 후 재확인
+      if (!req.user) {
+         // 최대 3번까지 재시도 (각 100ms 대기)
+         for (let attempt = 0; attempt < 3; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 100))
+            // Passport가 자동으로 deserializeUser를 호출하므로 재확인
+            if (req.user) {
+               return next()
+            }
+         }
+         
+         // 여전히 req.user가 없으면 세션 복원 실패
+         const error = new Error('세션 복원에 실패했습니다. 다시 로그인해주세요.')
+         error.status = 401
+         return next(error)
+      }
+      
+      // req.user가 있으면 정상 진행
+      next()
    } else {
       // 로그인이 되지 않았을경우 에러 미들웨어로 에러 전송
       const error = new Error('로그인이 필요합니다.')

@@ -12,11 +12,23 @@ module.exports = () => {
    })
 
    // 매 요청 시 세션에 저장된 id를 이용해 유저 정보 복원
-   passport.deserializeUser((id, done) => {
-   // 세션에 저장된 id를 기반으로 유저 정보를 복원
-      User.findOne({ where: { id } })
-         .then((user) => done(null, user)) // 세션에서 유저 정보를 복원
-         .catch((err) => done(err)) // 오류 발생 시 에러 반환
+   passport.deserializeUser(async (id, done) => {
+      try {
+         // 세션에 저장된 id를 기반으로 유저 정보를 복원
+         const user = await User.findOne({ where: { id } })
+         
+         if (!user) {
+            // 사용자가 DB에서 삭제되었을 수 있음
+            return done(null, false)
+         }
+         
+         // 세션에서 유저 정보를 복원
+         done(null, user)
+      } catch (err) {
+         // 오류 발생 시 에러 반환
+         console.error('deserializeUser 오류:', err)
+         done(err)
+      }
    })
 
    // 로컬 로그인 전략 설정

@@ -148,6 +148,32 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
             })
          }
 
+         // 로그인 성공 후 JWT 토큰 자동 발급
+         let token = null
+         try {
+            if (process.env.JWT_SECRET) {
+               const jwt = require('jsonwebtoken')
+               const { Domain } = require('../models')
+               const origin = req.get('origin') || req.headers.host
+               
+               // JWT 토큰 생성
+               token = jwt.sign({ id: user.id, email: user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+               
+               // DB에 토큰 저장
+               const [row, created] = await Domain.findOrCreate({
+                  where: { userId: user.id, host: origin },
+                  defaults: { clientToken: token },
+               })
+               if (!created) {
+                  row.clientToken = token
+                  await row.save()
+               }
+            }
+         } catch (tokenError) {
+            // 토큰 발급 실패해도 로그인은 성공으로 처리
+            console.error('토큰 자동 발급 실패:', tokenError.message)
+         }
+
          return res.status(200).json({
             success: true,
             message: '로그인 성공',
@@ -167,6 +193,7 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
                defaultDeliveryRequest: user.defaultDeliveryRequest,
             defaultDeliveryAddressDetail: user.defaultDeliveryAddressDetail,
             },
+            token: token, // 토큰이 있으면 함께 반환
          })
       })
    })(req, res, next)

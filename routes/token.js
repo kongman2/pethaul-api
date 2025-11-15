@@ -12,14 +12,20 @@ const router = express.Router()
  */
 router.get('/get', isLoggedIn, async (req, res, next) => {
    try {
-      // req.user 확인 (isLoggedIn 미들웨어를 통과했지만 req.user가 없을 수 있음)
+      // req.user 확인 (isLoggedIn 미들웨어에서 이미 확인했지만 이중 체크)
       if (!req.user) {
+         // 상세한 로깅 (프로덕션에서도 디버깅용)
+         console.error('토큰 발급 실패: req.user가 없습니다.', {
+            isAuthenticated: req.isAuthenticated(),
+            session: req.session,
+         })
          const error = new Error('사용자 정보를 찾을 수 없습니다. 세션이 만료되었거나 유효하지 않습니다.')
          error.status = 401
          return next(error)
       }
 
       if (!req.user.id) {
+         console.error('토큰 발급 실패: req.user.id가 없습니다.', { user: req.user })
          const error = new Error('사용자 ID를 찾을 수 없습니다.')
          error.status = 401
          return next(error)
