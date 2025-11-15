@@ -103,7 +103,7 @@ router.get('/my', authenticateToken, async (req, res, next) => {
 /**
  * 전체 교환/반품 신청 목록 조회 (관리자)
  */
-router.get('/all', isAdmin, async (req, res, next) => {
+router.get('/all', authenticateToken, isAdmin, async (req, res, next) => {
    try {
       const exchangeReturns = await ExchangeReturn.findAll({
          include: [
@@ -148,7 +148,7 @@ router.get('/all', isAdmin, async (req, res, next) => {
 /**
  * 교환/반품 상태 변경 (관리자)
  */
-router.patch('/:id/status', isAdmin, async (req, res, next) => {
+router.patch('/:id/status', authenticateToken, isAdmin, async (req, res, next) => {
    try {
       const { id } = req.params
       const { status, adminComment } = req.body

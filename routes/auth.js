@@ -612,7 +612,7 @@ router.post('/updatepw', isNotLoggedIn, async (req, res, next) => {
 })
 
 //회원 정보 수정
-router.put('/', isLoggedIn, async (req, res, next) => {
+router.put('/', authenticateToken, async (req, res, next) => {
    try {
       const {
          name,

@@ -136,20 +136,21 @@ exports.isNotLoggedIn = (req, res, next) => {
 }
 
 // 관리자 권한 확인 미들웨어
+// authenticateToken이 먼저 호출되어 req.user가 설정되어 있어야 함
 exports.isAdmin = (req, res, next) => {
-   // 로그인 상태 확인
-   if (req.isAuthenticated()) {
-      // 사용자 권한 확인
-      if (req.user && req.user.role === 'ADMIN') {
-         next() // role이 ADMIN이면 다음 미들웨어로 이동
-      } else {
-         //권한 부족
-         const error = new Error('관리자 권한이 필요합니다.')
-         error.status = 403
-         return next(error)
-      }
-   } else {
+   // req.user가 없으면 authenticateToken이 먼저 호출되지 않았거나 인증 실패
+   if (!req.user) {
       const error = new Error('로그인이 필요합니다.')
+      error.status = 403
+      return next(error)
+   }
+
+   // 사용자 권한 확인
+   if (req.user.role === 'ADMIN' || req.user.isAdmin === true || req.user.role === 'admin') {
+      next() // role이 ADMIN이면 다음 미들웨어로 이동
+   } else {
+      // 권한 부족
+      const error = new Error('관리자 권한이 필요합니다.')
       error.status = 403
       return next(error)
    }
