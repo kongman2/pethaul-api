@@ -86,29 +86,42 @@ const allowedOrigins = process.env.FRONTEND_APP_URL
    ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
    : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
 
-app.use(
-   cors({
-      origin: (origin, callback) => {
-         // origin이 없으면 (같은 도메인 요청 등) 허용
-         if (!origin) return callback(null, true)
-         
-         // 허용된 origin인지 확인
-         if (allowedOrigins.includes(origin)) {
+// CORS 미들웨어 설정
+const corsOptions = {
+   origin: (origin, callback) => {
+      // origin이 없으면 (같은 도메인 요청, Postman 등) 허용
+      if (!origin) return callback(null, true)
+      
+      // 허용된 origin인지 확인
+      if (allowedOrigins.includes(origin)) {
+         callback(null, true)
+      } else {
+         // 개발 환경에서는 모든 origin 허용 (디버깅용)
+         if (process.env.NODE_ENV === 'development') {
             callback(null, true)
          } else {
-            // 개발 환경에서는 모든 origin 허용 (디버깅용)
-            if (process.env.NODE_ENV === 'development') {
+            // 프로덕션에서는 Render.com 도메인도 허용 (안전장치)
+            if (origin.includes('onrender.com')) {
                callback(null, true)
             } else {
                callback(new Error('CORS 정책에 의해 차단되었습니다.'))
             }
          }
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-   })
-)
+      }
+   },
+   credentials: true,
+   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+   exposedHeaders: ['Content-Type', 'Authorization'],
+   maxAge: 86400, // 24시간
+   preflightContinue: false,
+   optionsSuccessStatus: 204,
+}
+
+app.use(cors(corsOptions))
+
+// OPTIONS 요청 명시적 처리 (프리플라이트 요청)
+app.options('*', cors(corsOptions))
 app.use(morgan('dev'))
 
 // Static uploads: serve exactly at "/uploads"
@@ -173,13 +186,28 @@ app.use((req, res, next) => {
    next(error)
 })
 
-// Error handler
+// Error handler (CORS 헤더 포함)
 app.use((err, req, res, next) => {
    const statusCode = err.status || 500
    const errorMessage = err.message || '서버 내부 오류'
-   if (process.env.NODE_ENV === 'development') {
+   
+   // CORS 헤더 추가 (에러 응답에도 필요)
+   const origin = req.headers.origin
+   if (origin) {
+      const allowedOrigins = process.env.FRONTEND_APP_URL
+         ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+         : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+      
+      if (allowedOrigins.includes(origin) || origin.includes('onrender.com') || process.env.NODE_ENV === 'development') {
+         res.setHeader('Access-Control-Allow-Origin', origin)
+         res.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
    }
-   res.status(statusCode).json({ success: false, message: errorMessage, error: err })
+   
+   if (process.env.NODE_ENV === 'development') {
+      console.error('에러 상세:', err)
+   }
+   res.status(statusCode).json({ success: false, message: errorMessage, error: process.env.NODE_ENV === 'development' ? err : undefined })
 })
 
 app.listen(app.get('port'), () => {
