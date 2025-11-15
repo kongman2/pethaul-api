@@ -452,16 +452,48 @@ router.get('/google/callback', async (req, res) => {
             resToken.on('end', () => {
                try {
                   const parsed = JSON.parse(data)
+                  console.log('🔍 Google 토큰 교환 응답:', {
+                     statusCode: resToken.statusCode,
+                     hasAccessToken: !!parsed.access_token,
+                     hasError: !!parsed.error,
+                     error: parsed.error,
+                     errorDescription: parsed.error_description,
+                     errorUri: parsed.error_uri,
+                  })
+                  
                   if (resToken.statusCode === 200) {
                      resolve(parsed)
                   } else {
                      console.error('❌ Google 토큰 교환 실패:', {
                         statusCode: resToken.statusCode,
                         response: parsed,
+                        fullResponse: JSON.stringify(parsed, null, 2),
                      })
+                     
+                     // 특정 에러에 대한 상세 로그
+                     if (parsed.error === 'invalid_grant') {
+                        console.error('❌ invalid_grant 오류 - 가능한 원인:')
+                        console.error('   1. Authorization code가 이미 사용되었거나 만료됨')
+                        console.error('   2. Redirect URI가 Google Cloud Console에 등록된 것과 일치하지 않음')
+                        console.error('   3. Client ID/Secret이 잘못됨')
+                        console.error('   등록된 Callback URL:', callbackURL)
+                     } else if (parsed.error === 'redirect_uri_mismatch') {
+                        console.error('❌ redirect_uri_mismatch 오류:')
+                        console.error('   사용된 Callback URL:', callbackURL)
+                        console.error('   Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.')
+                     } else if (parsed.error === 'invalid_client') {
+                        console.error('❌ invalid_client 오류:')
+                        console.error('   Client ID 또는 Client Secret이 잘못되었습니다.')
+                        console.error('   Client ID prefix:', process.env.GOOGLE_CLIENT_ID?.substring(0, 15))
+                     }
+                     
                      reject(new Error(parsed.error_description || parsed.error || 'Token exchange failed'))
                   }
                } catch (err) {
+                  console.error('❌ Google 토큰 교환 응답 파싱 오류:', {
+                     error: err.message,
+                     rawData: data.substring(0, 500),
+                  })
                   reject(err)
                }
             })
