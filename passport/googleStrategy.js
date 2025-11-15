@@ -18,6 +18,13 @@ module.exports = () => {
    }
    
    console.log('🔐 Google OAuth Callback URL:', callbackURL)
+   console.log('🔐 Google OAuth Client ID:', process.env.GOOGLE_CLIENT_ID ? `${process.env.GOOGLE_CLIENT_ID.substring(0, 10)}...` : '미설정')
+   console.log('🔐 Google OAuth Client Secret:', process.env.GOOGLE_CLIENT_SECRET ? '설정됨' : '미설정')
+   
+   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      console.error('❌ Google OAuth 환경 변수가 설정되지 않았습니다.')
+      return
+   }
    
    passport.use(
       new GoogleStrategy(

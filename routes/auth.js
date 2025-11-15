@@ -309,7 +309,14 @@ router.get(
    (req, res, next) => {
       passport.authenticate('google', (err, user, info) => {
          if (err) {
-            console.error('❌ Google OAuth 인증 오류:', err)
+            console.error('❌ Google OAuth 인증 오류:', {
+               message: err.message,
+               stack: err.stack,
+               name: err.name,
+               code: err.code,
+               statusCode: err.statusCode,
+               info: info,
+            })
             // 에러 발생 시에도 프론트엔드로 리다이렉트 (사용자 경험 개선)
             const isDevelopment = process.env.NODE_ENV !== 'production'
             const clientUrl = isDevelopment
@@ -318,7 +325,12 @@ router.get(
             return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
          }
          if (!user) {
-            console.warn('⚠️ Google OAuth 인증 실패: 사용자 정보 없음', info)
+            console.warn('⚠️ Google OAuth 인증 실패: 사용자 정보 없음', {
+               info: info,
+               hasInfo: !!info,
+               infoType: typeof info,
+               infoKeys: info ? Object.keys(info) : null,
+            })
             const isDevelopment = process.env.NODE_ENV !== 'production'
             const clientUrl = isDevelopment
                ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
