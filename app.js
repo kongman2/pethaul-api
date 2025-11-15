@@ -65,8 +65,12 @@ async function connectDB() {
       // 먼저 연결 테스트
       await sequelize.authenticate()
       console.log('✅ 데이터베이스 연결 성공')
-      await sequelize.sync({ force: false, alter: false })
-      console.log('✅ 데이터베이스 동기화 완료')
+      
+      // 프로덕션에서 한 번만 alter: true로 실행하여 누락된 컬럼 추가
+      // 이후에는 alter: false로 변경 권장
+      const shouldAlter = process.env.NODE_ENV === 'production' && process.env.ALLOW_DB_ALTER === 'true'
+      await sequelize.sync({ force: false, alter: shouldAlter })
+      console.log('✅ 데이터베이스 동기화 완료', { alter: shouldAlter })
    } catch (err) {
       console.error('❌ 데이터베이스 연결 실패')
       
