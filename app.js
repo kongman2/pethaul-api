@@ -125,9 +125,9 @@ app.use(morgan('dev'))
 const uploadsDir = path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
 
-// 이미지 파일에 대한 CORS 헤더 추가 미들웨어
+// 이미지 파일에 대한 CORS 및 CORB 차단 방지 헤더 추가 미들웨어
 app.use('/uploads', (req, res, next) => {
-   // CORS 헤더 설정 (이미지 파일도 ORB 차단 방지)
+   // CORS 헤더 설정 (이미지 파일도 ORB/CORB 차단 방지)
    const origin = req.headers.origin
    if (origin) {
       const allowedOrigins = process.env.FRONTEND_APP_URL
@@ -143,9 +143,12 @@ app.use('/uploads', (req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
    }
    
-   // ORB 차단 방지를 위한 헤더
+   // ORB/CORB 차단 방지를 위한 헤더
    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
    res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
+   
+   // CORB 차단 방지: 브라우저가 MIME 타입을 올바르게 인식하도록
+   res.setHeader('X-Content-Type-Options', 'nosniff')
    
    next()
 })
@@ -155,7 +158,7 @@ app.use(
    express.static(uploadsDir, {
       fallthrough: false, // not found => 404 immediately
       setHeaders: (res, filePath) => {
-         // MIME 타입 명시적 설정 (ORB 차단 방지)
+         // MIME 타입 명시적 설정 (ORB/CORB 차단 방지)
          const ext = path.extname(filePath).toLowerCase()
          const mimeTypes = {
             '.jpg': 'image/jpeg',
@@ -165,9 +168,20 @@ app.use(
             '.webp': 'image/webp',
             '.svg': 'image/svg+xml',
          }
+         
+         // 확장자에 맞는 MIME 타입 설정
          if (mimeTypes[ext]) {
             res.setHeader('Content-Type', mimeTypes[ext])
+         } else {
+            // 확장자가 없거나 알 수 없는 경우 기본값
+            res.setHeader('Content-Type', 'application/octet-stream')
          }
+         
+         // CORB 차단 방지: 브라우저가 MIME 타입 스니핑을 하지 않도록
+         res.setHeader('X-Content-Type-Options', 'nosniff')
+         
+         // 캐시 헤더 (선택사항)
+         // res.setHeader('Cache-Control', 'public, max-age=31536000')
       },
       // maxAge: '7d', // enable if you want caching
    })
