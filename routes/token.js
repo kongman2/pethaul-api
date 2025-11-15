@@ -12,16 +12,23 @@ const router = express.Router()
  */
 router.get('/get', isLoggedIn, async (req, res, next) => {
    try {
+      // req.user 확인
+      if (!req.user || !req.user.id) {
+         const error = new Error('사용자 정보를 찾을 수 없습니다.')
+         error.status = 401
+         return next(error)
+      }
+
       const origin = req.get('origin') || req.headers.host
 
-      // 필수 설정 체크 (선택)
+      // 필수 설정 체크
       if (!process.env.JWT_SECRET) {
          const error = new Error('서버 설정 오류: JWT_SECRET이 설정되어 있지 않습니다.')
          error.status = 500
          return next(error)
       }
 
-      const token = jwt.sign({ id: req.user.id, email: req.user.email }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+      const token = jwt.sign({ id: req.user.id, email: req.user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
 
       // 동일 (userId, host) 가 있으면 갱신, 없으면 생성
       const [row, created] = await Domain.findOrCreate({
@@ -35,6 +42,12 @@ router.get('/get', isLoggedIn, async (req, res, next) => {
 
       return res.json({ success: true, message: '토큰이 발급되었습니다.', token })
    } catch (error) {
+      // 에러 로깅 (개발 환경에서만)
+      if (process.env.NODE_ENV === 'development') {
+         console.error('토큰 발급 오류:', error)
+         console.error('req.user:', req.user)
+         console.error('req.isAuthenticated():', req.isAuthenticated())
+      }
       error.status = error.status || 500
       error.message = error.message || '토큰 발급 중 오류가 발생했습니다.'
       return next(error)
