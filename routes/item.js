@@ -328,11 +328,19 @@ router.get('/popular-keywords', async (req, res, next) => {
    try {
       const limit = parseInt(req.query.limit, 10) || 4
 
-      const keywords = await SearchKeyword.findAll({
-         order: [['searchCount', 'DESC'], ['updatedAt', 'DESC']],
-         limit,
-         attributes: ['keyword', 'searchCount'],
-      })
+      // SearchKeyword 모델이 없을 경우 빈 배열 반환
+      let keywords = []
+      try {
+         keywords = await SearchKeyword.findAll({
+            order: [['searchCount', 'DESC'], ['updatedAt', 'DESC']],
+            limit,
+            attributes: ['keyword', 'searchCount'],
+         })
+      } catch (dbError) {
+         // 데이터베이스 오류 시 빈 배열 반환 (서버 크래시 방지)
+         console.error('인기 검색어 조회 DB 오류:', dbError.message)
+         keywords = []
+      }
 
       return res.json({
          success: true,
@@ -340,6 +348,13 @@ router.get('/popular-keywords', async (req, res, next) => {
          keywords: keywords.map((k) => k.keyword),
       })
    } catch (error) {
+      // 에러 발생 시에도 CORS 헤더 보장
+      const origin = req.headers.origin
+      if (origin) {
+         res.setHeader('Access-Control-Allow-Origin', origin)
+         res.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
+      
       error.status = error.status || 500
       error.message = '인기 검색어 불러오기 실패'
       return next(error)
