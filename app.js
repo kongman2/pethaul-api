@@ -134,16 +134,34 @@ app.use(
 
 // Legacy fallback: 루트 경로로 요청된 이미지를 /uploads로 리다이렉트
 // 예: /KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg -> /uploads/KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg
-app.get(/^\/(?:[^\/]+\.(?:png|jpe?g|webp|gif|svg))$/i, (req, res, next) => {
-   const filename = path.basename(decodeURIComponent(req.path.slice(1)))
-   const abs = path.join(uploadsDir, filename)
-   fs.access(abs, fs.constants.R_OK, (err) => {
-      if (err) {
-         return next() // 파일이 없으면 다음 미들웨어로
-      }
-      // 파일이 있으면 /uploads 경로로 리다이렉트
-      res.redirect(`/uploads/${encodeURIComponent(filename)}`)
-   })
+// 라우터보다 먼저 실행되도록 위치 중요
+app.get(/^\/([^\/?]+\.(?:png|jpe?g|webp|gif|svg))$/i, (req, res, next) => {
+   try {
+      // URL 디코딩된 파일명 가져오기
+      const encodedFilename = req.params[0]
+      const decodedFilename = decodeURIComponent(encodedFilename)
+      
+      // 파일 경로 확인
+      const abs = path.join(uploadsDir, decodedFilename)
+      
+      fs.access(abs, fs.constants.R_OK, (err) => {
+         if (err) {
+            // 파일이 없으면 다음 미들웨어로
+            console.log('⚠️ 레거시 이미지 파일 없음:', decodedFilename)
+            return next()
+         }
+         
+         // 파일이 있으면 /uploads 경로로 리다이렉트
+         // 원본 인코딩된 파일명 사용 (공백 등이 %20으로 인코딩된 경우)
+         const redirectPath = `/uploads/${encodedFilename}`
+         console.log('✅ 레거시 이미지 리다이렉트:', req.path, '->', redirectPath)
+         res.redirect(redirectPath)
+      })
+   } catch (error) {
+      // 디코딩 실패 시 다음 미들웨어로
+      console.warn('⚠️ 레거시 이미지 디코딩 실패:', req.path, error.message)
+      next()
+   }
 })
 
 app.use(express.json())
