@@ -17,4 +17,6 @@ services:
         sync: false
       - key: FRONTEND_APP_URL
         sync: false
+      - key: CLIENT_URL
+        sync: false
     healthCheckPath: /

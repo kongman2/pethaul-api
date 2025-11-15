@@ -3,12 +3,28 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy
 const User = require('../models/user')
 
 module.exports = () => {
+   // 프로덕션에서는 절대 URL 사용, 개발 환경에서는 절대 URL 사용 (Google OAuth 요구사항)
+   let callbackURL = process.env.GOOGLE_CALLBACK_URL
+   
+   if (!callbackURL) {
+      if (process.env.NODE_ENV === 'production') {
+         // 프로덕션: Render.com URL 사용
+         callbackURL = `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+      } else {
+         // 개발 환경: localhost URL 사용 (Google OAuth 콘솔에 등록 필요)
+         const port = process.env.PORT || 8002
+         callbackURL = `http://localhost:${port}/auth/google/callback`
+      }
+   }
+   
+   console.log('🔐 Google OAuth Callback URL:', callbackURL)
+   
    passport.use(
       new GoogleStrategy(
          {
             clientID: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            callbackURL: '/auth/google/callback',
+            callbackURL: callbackURL,
          },
          async (accessToken, refreshToken, profile, done) => {
             try {

@@ -151,27 +151,56 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
          // 로그인 성공 후 JWT 토큰 자동 발급
          let token = null
          try {
-            if (process.env.JWT_SECRET) {
+            // 1. JWT_SECRET 확인
+            if (!process.env.JWT_SECRET) {
+               console.warn('⚠️ 토큰 자동 발급 실패: JWT_SECRET 환경변수가 설정되지 않았습니다.')
+               // JWT_SECRET이 없으면 토큰 발급 불가능
+            } else if (!user || !user.id) {
+               console.warn('⚠️ 토큰 자동 발급 실패: user 또는 user.id가 없습니다.', { user: user ? { id: user.id } : null })
+            } else {
                const jwt = require('jsonwebtoken')
                const { Domain } = require('../models')
-               const origin = req.get('origin') || req.headers.host
+               const origin = req.get('origin') || req.headers.host || 'unknown'
                
-               // JWT 토큰 생성
-               token = jwt.sign({ id: user.id, email: user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+               // 2. JWT 토큰 생성
+               try {
+                  token = jwt.sign({ id: user.id, email: user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+                  console.log('✅ JWT 토큰 생성 성공:', { userId: user.id, origin })
+               } catch (jwtError) {
+                  console.error('❌ JWT 토큰 생성 실패:', jwtError.message)
+                  throw jwtError
+               }
                
-               // DB에 토큰 저장
-               const [row, created] = await Domain.findOrCreate({
-                  where: { userId: user.id, host: origin },
-                  defaults: { clientToken: token },
-               })
-               if (!created) {
-                  row.clientToken = token
-                  await row.save()
+               // 3. DB에 토큰 저장
+               try {
+                  const [row, created] = await Domain.findOrCreate({
+                     where: { userId: user.id, host: origin },
+                     defaults: { clientToken: token },
+                  })
+                  if (!created) {
+                     row.clientToken = token
+                     await row.save()
+                  }
+                  console.log('✅ 토큰 DB 저장 성공:', { userId: user.id, origin, created })
+               } catch (dbError) {
+                  console.error('❌ 토큰 DB 저장 실패:', dbError.message)
+                  console.error('DB 오류 상세:', {
+                     userId: user.id,
+                     origin,
+                     error: dbError.name,
+                     message: dbError.message,
+                  })
+                  // DB 저장 실패해도 토큰은 생성되었으므로 반환 가능
                }
             }
          } catch (tokenError) {
             // 토큰 발급 실패해도 로그인은 성공으로 처리
-            console.error('토큰 자동 발급 실패:', tokenError.message)
+            console.error('❌ 토큰 자동 발급 실패:', {
+               message: tokenError.message,
+               stack: tokenError.stack,
+               userId: user?.id,
+               hasJWTSecret: !!process.env.JWT_SECRET,
+            })
          }
 
          return res.status(200).json({
@@ -247,9 +276,117 @@ router.get(
       failureRedirect: '/login',
       session: true,
    }),
-   (req, res) => {
-      // 로그인 성공 시 프론트로 리다이렉트
-      return res.redirect(`${process.env.CLIENT_URL}/google-success`)
+   async (req, res) => {
+      try {
+         // 구글 로그인 성공 후 JWT 토큰 자동 발급
+         let token = null
+         try {
+            // 1. req.user 확인
+            if (!req.user) {
+               console.warn('⚠️ 구글 로그인 토큰 발급 실패: req.user가 없습니다.')
+            } else if (!req.user.id) {
+               console.warn('⚠️ 구글 로그인 토큰 발급 실패: req.user.id가 없습니다.', { user: req.user })
+            } else if (!process.env.JWT_SECRET) {
+               console.warn('⚠️ 구글 로그인 토큰 발급 실패: JWT_SECRET 환경변수가 설정되지 않았습니다.')
+            } else {
+               const jwt = require('jsonwebtoken')
+               const { Domain } = require('../models')
+               const origin = req.get('origin') || req.headers.host || 'unknown'
+               
+               // 2. JWT 토큰 생성
+               try {
+                  token = jwt.sign({ id: req.user.id, email: req.user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+                  console.log('✅ 구글 로그인 JWT 토큰 생성 성공:', { userId: req.user.id, origin })
+               } catch (jwtError) {
+                  console.error('❌ 구글 로그인 JWT 토큰 생성 실패:', jwtError.message)
+                  throw jwtError
+               }
+               
+               // 3. DB에 토큰 저장
+               try {
+                  const [row, created] = await Domain.findOrCreate({
+                     where: { userId: req.user.id, host: origin },
+                     defaults: { clientToken: token },
+                  })
+                  if (!created) {
+                     row.clientToken = token
+                     await row.save()
+                  }
+                  console.log('✅ 구글 로그인 토큰 DB 저장 성공:', { userId: req.user.id, origin, created })
+               } catch (dbError) {
+                  console.error('❌ 구글 로그인 토큰 DB 저장 실패:', dbError.message)
+                  console.error('DB 오류 상세:', {
+                     userId: req.user.id,
+                     origin,
+                     error: dbError.name,
+                     message: dbError.message,
+                  })
+                  // DB 저장 실패해도 토큰은 생성되었으므로 반환 가능
+               }
+            }
+         } catch (tokenError) {
+            // 토큰 발급 실패해도 로그인은 성공으로 처리
+            console.error('❌ 구글 로그인 토큰 자동 발급 실패:', {
+               message: tokenError.message,
+               stack: tokenError.stack,
+               userId: req.user?.id,
+               hasJWTSecret: !!process.env.JWT_SECRET,
+            })
+         }
+
+         // 개발 환경과 프로덕션 환경 구분
+         const isDevelopment = process.env.NODE_ENV !== 'production'
+         let clientUrl
+         
+         if (isDevelopment) {
+            // 개발 환경: localhost 사용
+            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173'
+         } else {
+            // 프로덕션: 환경 변수 필수, 없으면 기본값 사용
+            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL
+            if (!clientUrl) {
+               console.warn('⚠️ 프로덕션 환경에서 CLIENT_URL 또는 FRONTEND_APP_URL이 설정되지 않았습니다. 기본값 사용.')
+               clientUrl = 'https://pethaul-frontend.onrender.com'
+            }
+         }
+         
+         // 토큰이 있으면 URL 파라미터로 전달
+         const redirectUrl = token 
+            ? `${clientUrl}/google-success?token=${encodeURIComponent(token)}`
+            : `${clientUrl}/google-success`
+         
+         console.log('✅ 구글 로그인 성공, 리다이렉트:', redirectUrl, { 
+            isDevelopment, 
+            hasToken: !!token, 
+            userId: req.user?.id,
+            clientUrl,
+            envVars: {
+               CLIENT_URL: process.env.CLIENT_URL || '미설정',
+               FRONTEND_APP_URL: process.env.FRONTEND_APP_URL || '미설정',
+               NODE_ENV: process.env.NODE_ENV || '미설정'
+            }
+         })
+         // 로그인 성공 시 프론트로 리다이렉트
+         return res.redirect(redirectUrl)
+      } catch (error) {
+         console.error('구글 로그인 콜백 오류:', error)
+         // 에러 발생 시에도 리다이렉트 (로그인은 성공했을 수 있음)
+         const isDevelopment = process.env.NODE_ENV !== 'production'
+         let clientUrl
+         
+         if (isDevelopment) {
+            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173'
+         } else {
+            clientUrl = process.env.CLIENT_URL || process.env.FRONTEND_APP_URL
+            if (!clientUrl) {
+               console.warn('⚠️ 프로덕션 환경에서 CLIENT_URL 또는 FRONTEND_APP_URL이 설정되지 않았습니다. 기본값 사용.')
+               clientUrl = 'https://pethaul-frontend.onrender.com'
+            }
+         }
+         
+         console.log('⚠️ 구글 로그인 콜백 오류 후 리다이렉트:', `${clientUrl}/google-success`, { isDevelopment, clientUrl })
+         return res.redirect(`${clientUrl}/google-success`)
+      }
    }
 )
 
