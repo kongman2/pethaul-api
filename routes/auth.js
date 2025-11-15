@@ -306,10 +306,39 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 // ✅ 구글 로그인 콜백 처리
 router.get(
    '/google/callback',
-   passport.authenticate('google', {
-      failureRedirect: '/login',
-      session: true,
-   }),
+   (req, res, next) => {
+      passport.authenticate('google', (err, user, info) => {
+         if (err) {
+            console.error('❌ Google OAuth 인증 오류:', err)
+            // 에러 발생 시에도 프론트엔드로 리다이렉트 (사용자 경험 개선)
+            const isDevelopment = process.env.NODE_ENV !== 'production'
+            const clientUrl = isDevelopment
+               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+            return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+         }
+         if (!user) {
+            console.warn('⚠️ Google OAuth 인증 실패: 사용자 정보 없음', info)
+            const isDevelopment = process.env.NODE_ENV !== 'production'
+            const clientUrl = isDevelopment
+               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+            return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+         }
+         // 로그인 성공
+         req.logIn(user, (loginErr) => {
+            if (loginErr) {
+               console.error('❌ 세션 로그인 오류:', loginErr)
+               const isDevelopment = process.env.NODE_ENV !== 'production'
+               const clientUrl = isDevelopment
+                  ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+                  : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+               return res.redirect(`${clientUrl}/login?error=session_failed`)
+            }
+            next()
+         })
+      })(req, res, next)
+   },
    async (req, res) => {
       try {
          // 구글 로그인 성공 후 JWT 토큰 자동 발급
