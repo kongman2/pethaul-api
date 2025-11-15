@@ -119,9 +119,6 @@ const corsOptions = {
 }
 
 app.use(cors(corsOptions))
-
-// OPTIONS 요청 명시적 처리 (프리플라이트 요청)
-app.options('*', cors(corsOptions))
 app.use(morgan('dev'))
 
 // Static uploads: serve exactly at "/uploads"
