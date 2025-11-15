@@ -114,12 +114,33 @@ router.get('/', async (req, res, next) => {
       const searchTerm = req.query.searchTerm || ''
       let sellCategory = req.query.sellCategory ?? req.query['sellCategory[]'] ?? null
 
+      // URL 디코딩 처리
       if (typeof sellCategory === 'string') {
+         try {
+            sellCategory = decodeURIComponent(sellCategory)
+         } catch (e) {
+            // 디코딩 실패 시 원본 사용
+            console.warn('sellCategory 디코딩 실패:', e.message)
+         }
          sellCategory = [sellCategory]
       }
       if (Array.isArray(sellCategory)) {
-         sellCategory = sellCategory.filter(Boolean)
+         // 배열의 각 요소도 디코딩
+         sellCategory = sellCategory
+            .filter(Boolean)
+            .map(cat => {
+               try {
+                  return decodeURIComponent(cat)
+               } catch (e) {
+                  return cat
+               }
+            })
       } else if (typeof sellCategory === 'string') {
+         try {
+            sellCategory = decodeURIComponent(sellCategory)
+         } catch (e) {
+            // 디코딩 실패 시 원본 사용
+         }
          sellCategory = sellCategory.split(',').filter(Boolean)
       } else {
          sellCategory = null
