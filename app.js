@@ -169,16 +169,43 @@ if (!fs.existsSync(uploadsDir)) {
 app.use('/uploads', (req, res, next) => {
    const requestedFile = req.path.replace(/^\//, '') // 앞의 슬래시 제거
    if (requestedFile) {
-      const filePath = path.join(uploadsDir, requestedFile)
+      // URL 디코딩된 파일명 사용
+      let decodedFile
+      try {
+         decodedFile = decodeURIComponent(requestedFile)
+      } catch (e) {
+         decodedFile = requestedFile
+      }
+      
+      const filePath = path.join(uploadsDir, decodedFile)
+      
       // 파일 존재 여부 확인 (비동기로 확인하되 응답은 차단하지 않음)
       fs.access(filePath, fs.constants.R_OK, (err) => {
          if (err) {
-            console.log('⚠️ 이미지 파일 없음:', {
-               requestedPath: req.path,
-               decodedFile: decodeURIComponent(requestedFile),
-               filePath: filePath,
-               error: err.code,
-            })
+            // 디렉토리 내 실제 파일 목록 확인 (디버깅용)
+            try {
+               const files = fs.readdirSync(uploadsDir)
+               const matchingFiles = files.filter(f => 
+                  f.includes(decodedFile.split(' ')[0]) || 
+                  decodedFile.includes(f.split(' ')[0])
+               )
+               console.log('⚠️ 이미지 파일 없음:', {
+                  requestedPath: req.path,
+                  decodedFile: decodedFile,
+                  filePath: filePath,
+                  error: err.code,
+                  totalFiles: files.length,
+                  sampleFiles: files.slice(0, 5),
+                  matchingFiles: matchingFiles.slice(0, 3),
+               })
+            } catch (dirErr) {
+               console.log('⚠️ 이미지 파일 없음:', {
+                  requestedPath: req.path,
+                  decodedFile: decodedFile,
+                  filePath: filePath,
+                  error: err.code,
+               })
+            }
          }
       })
    }
@@ -213,10 +240,58 @@ app.use('/uploads', (req, res, next) => {
    next()
 })
 
+// express.static은 자동으로 URL 디코딩을 처리하지만, 
+// 파일명에 공백이나 특수문자가 있을 경우 문제가 될 수 있음
+// 커스텀 미들웨어로 URL 디코딩 처리
+app.use('/uploads', (req, res, next) => {
+   const requestedFile = req.path.replace(/^\//, '')
+   if (!requestedFile) {
+      return next()
+   }
+   
+   // URL 디코딩
+   let decodedFile
+   try {
+      decodedFile = decodeURIComponent(requestedFile)
+   } catch (e) {
+      decodedFile = requestedFile
+   }
+   
+   // 디코딩된 파일 경로로 파일 찾기
+   const filePath = path.join(uploadsDir, decodedFile)
+   
+   // 파일 존재 확인
+   fs.access(filePath, fs.constants.R_OK, (err) => {
+      if (err) {
+         return next() // 파일이 없으면 다음 미들웨어로 (404 처리)
+      }
+      
+      // 파일이 있으면 직접 서빙
+      const ext = path.extname(filePath).toLowerCase()
+      const mimeTypes = {
+         '.jpg': 'image/jpeg',
+         '.jpeg': 'image/jpeg',
+         '.png': 'image/png',
+         '.gif': 'image/gif',
+         '.webp': 'image/webp',
+         '.svg': 'image/svg+xml',
+      }
+      
+      if (mimeTypes[ext]) {
+         res.setHeader('Content-Type', mimeTypes[ext])
+      } else {
+         res.setHeader('Content-Type', 'application/octet-stream')
+      }
+      
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.sendFile(filePath)
+   })
+})
+
 app.use(
    '/uploads',
    express.static(uploadsDir, {
-      fallthrough: false, // not found => 404 immediately
+      fallthrough: true, // 커스텀 미들웨어에서 처리 못한 경우에만 사용
       setHeaders: (res, filePath) => {
          // MIME 타입 명시적 설정 (ORB/CORB 차단 방지)
          const ext = path.extname(filePath).toLowerCase()
