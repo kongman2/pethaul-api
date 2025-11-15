@@ -114,40 +114,94 @@ router.get('/', async (req, res, next) => {
       const searchTerm = req.query.searchTerm || ''
       let sellCategory = req.query.sellCategory ?? req.query['sellCategory[]'] ?? null
 
-      // URL 디코딩 처리
-      if (typeof sellCategory === 'string') {
-         try {
-            sellCategory = decodeURIComponent(sellCategory)
-         } catch (e) {
-            // 디코딩 실패 시 원본 사용
-            console.warn('sellCategory 디코딩 실패:', e.message)
-         }
-         sellCategory = [sellCategory]
-      }
-      if (Array.isArray(sellCategory)) {
-         // 배열의 각 요소도 디코딩
-         sellCategory = sellCategory
-            .filter(Boolean)
-            .map(cat => {
-               try {
-                  return decodeURIComponent(cat)
-               } catch (e) {
+      // URL 디코딩 처리 및 정규화
+      if (sellCategory) {
+         if (Array.isArray(sellCategory)) {
+            // 배열의 각 요소 디코딩
+            sellCategory = sellCategory
+               .filter(Boolean)
+               .map(cat => {
+                  if (typeof cat === 'string') {
+                     try {
+                        return decodeURIComponent(cat)
+                     } catch (e) {
+                        console.warn('sellCategory 배열 요소 디코딩 실패:', e.message, cat)
+                        return cat
+                     }
+                  }
                   return cat
+               })
+               .filter(Boolean) // 빈 문자열 제거
+         } else if (typeof sellCategory === 'string') {
+            try {
+               sellCategory = decodeURIComponent(sellCategory)
+               // 쉼표로 구분된 값 처리
+               if (sellCategory.includes(',')) {
+                  sellCategory = sellCategory.split(',').map(cat => cat.trim()).filter(Boolean)
+               } else {
+                  sellCategory = [sellCategory]
                }
-            })
-      } else if (typeof sellCategory === 'string') {
-         try {
-            sellCategory = decodeURIComponent(sellCategory)
-         } catch (e) {
-            // 디코딩 실패 시 원본 사용
+            } catch (e) {
+               console.warn('sellCategory 디코딩 실패:', e.message, sellCategory)
+               // 디코딩 실패 시 원본을 배열로 변환
+               sellCategory = sellCategory.includes(',') 
+                  ? sellCategory.split(',').map(cat => cat.trim()).filter(Boolean)
+                  : [sellCategory]
+            }
+         } else {
+            sellCategory = null
          }
-         sellCategory = sellCategory.split(',').filter(Boolean)
+         
+         // 빈 배열이면 null로 설정
+         if (Array.isArray(sellCategory) && sellCategory.length === 0) {
+            sellCategory = null
+         }
       } else {
          sellCategory = null
       }
+      
+      console.log('🔍 sellCategory 처리 결과:', { 
+         original: req.query.sellCategory, 
+         processed: sellCategory,
+         type: typeof sellCategory,
+         isArray: Array.isArray(sellCategory)
+      })
 
       const whereClause = {
          ...(searchTerm && { itemNm: { [Op.like]: `%${searchTerm}%` } }),
+      }
+
+      // Category 필터링이 있는 경우 ItemCategory를 통해 필터링
+      let categoryFilter = null
+      if (sellCategory && Array.isArray(sellCategory) && sellCategory.length > 0) {
+         // Category에서 해당 카테고리 이름들로 ID 찾기
+         const categories = await Category.findAll({
+            where: { categoryName: { [Op.in]: sellCategory } },
+            attributes: ['id']
+         })
+         
+         if (categories.length > 0) {
+            const categoryIds = categories.map(cat => cat.id)
+            categoryFilter = {
+               model: ItemCategory,
+               where: { categoryId: { [Op.in]: categoryIds } },
+               required: true, // INNER JOIN으로 필터링
+               attributes: []
+            }
+         } else {
+            // 카테고리가 존재하지 않으면 빈 결과 반환
+            return res.json({
+               success: true,
+               message: '상품 목록 조회 성공',
+               items: [],
+               pagination: {
+                  totalItems: 0,
+                  totalPages: 0,
+                  currentPage: page,
+                  limit,
+               },
+            })
+         }
       }
 
       const includeModels = [
@@ -155,17 +209,21 @@ router.get('/', async (req, res, next) => {
          {
             model: Category,
             attributes: ['id', 'categoryName'],
-            ...(sellCategory &&
-               sellCategory.length > 0 && {
-                  where: Array.isArray(sellCategory) ? { categoryName: { [Op.in]: sellCategory } } : { categoryName: sellCategory },
-               }),
+            through: { attributes: [] },
+            required: false,
          },
+         ...(categoryFilter ? [categoryFilter] : []),
       ]
 
       // 전체 상품 갯수
-      const count = await Item.count({
+      const countOptions = {
          where: whereClause,
-      })
+         ...(categoryFilter && {
+            include: [categoryFilter],
+            distinct: true, // 중복 제거
+         }),
+      }
+      const count = await Item.count(countOptions)
 
       const items = await Item.findAll({
          where: whereClause,
@@ -173,6 +231,7 @@ router.get('/', async (req, res, next) => {
          offset,
          order: [['createdAt', 'DESC']],
          include: includeModels,
+         ...(categoryFilter && { distinct: true }), // 중복 제거
       })
 
       // 검색어가 있으면 검색어 기록 (비동기로 처리하여 응답 지연 방지)
