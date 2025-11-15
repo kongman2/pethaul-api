@@ -415,30 +415,52 @@ router.get(
          }
          
          if (!user) {
-            console.warn('⚠️ Google OAuth 인증 실패: 사용자 정보 없음', {
+            console.error('❌ Google OAuth 인증 실패: 사용자 정보 없음', {
                info: info,
                hasInfo: !!info,
                infoType: typeof info,
                infoKeys: info ? Object.keys(info) : null,
                infoMessage: info?.message,
                infoCode: info?.code,
+               infoString: info ? JSON.stringify(info, null, 2) : null,
             })
             
             // info에 에러 정보가 있는 경우
             if (info && typeof info === 'object') {
-               console.error('❌ Google OAuth info 오류:', {
+               console.error('❌ Google OAuth info 오류 상세:', {
                   message: info.message,
                   code: info.code,
                   statusCode: info.statusCode,
                   allKeys: Object.keys(info),
+                  fullInfo: JSON.stringify(info, null, 2),
                })
+               
+               // 특정 에러 코드에 대한 처리
+               if (info.code === 'EAUTH' || info.message?.includes('redirect_uri_mismatch')) {
+                  console.error('❌ Redirect URI 불일치 감지:', {
+                     expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+                        ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+                        : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+                     message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
+                  })
+               }
+            }
+            
+            // 에러 원인을 URL 파라미터로 전달 (디버깅용)
+            let errorParam = 'google_auth_failed'
+            if (info?.code === 'EAUTH' || info?.message?.includes('redirect_uri')) {
+               errorParam = 'google_auth_failed:redirect_uri_mismatch'
+            } else if (info?.message?.includes('invalid_client')) {
+               errorParam = 'google_auth_failed:invalid_client'
+            } else if (info?.message?.includes('invalid_grant')) {
+               errorParam = 'google_auth_failed:invalid_grant'
             }
             
             const isDevelopment = process.env.NODE_ENV !== 'production'
             const clientUrl = isDevelopment
                ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
                : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-            return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+            return res.redirect(`${clientUrl}/login?error=${errorParam}`)
          }
          
          console.log('✅ Google OAuth 인증 성공, 세션 로그인 시도:', { userId: user.id, email: user.email })
