@@ -3,10 +3,44 @@ const express = require('express')
 const crypto = require('crypto')
 const bcrypt = require('bcrypt')
 const passport = require('passport')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
 const { User } = require('../models')
-const { isLoggedIn, isNotLoggedIn, authenticateToken } = require('./middlewares')
+const { isLoggedIn, isNotLoggedIn, authenticateToken, isAdmin } = require('./middlewares')
 
 const router = express.Router()
+
+// uploads 폴더 준비
+try {
+   fs.readdirSync('uploads')
+} catch (error) {
+   fs.mkdirSync('uploads', { recursive: true })
+}
+
+// multer 설정 (프로필 이미지 업로드용)
+const upload = multer({
+   storage: multer.diskStorage({
+      destination(req, file, cb) {
+         cb(null, 'uploads/')
+      },
+      filename(req, file, cb) {
+         const decoded = decodeURIComponent(file.originalname)
+         const ext = path.extname(decoded)
+         const basename = path.basename(decoded, ext)
+         const safeBase = basename.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]+/g, '') || 'profile'
+         cb(null, `profile-${Date.now()}-${safeBase}${ext}`)
+      },
+   }),
+   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+})
+
+function getBaseUrl(req) {
+   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '')
+   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http'
+   const host = req.get('host')
+   return `${proto}://${host}`
+}
 
 const normalizePhoneDigits = (value) => {
    if (typeof value !== 'string') return null
@@ -366,7 +400,7 @@ router.get(
                NODE_ENV: process.env.NODE_ENV || '미설정'
             }
          })
-         // 로그인 성공 시 프론트로 리다이렉트
+      // 로그인 성공 시 프론트로 리다이렉트
          return res.redirect(redirectUrl)
       } catch (error) {
          console.error('구글 로그인 콜백 오류:', error)
@@ -519,6 +553,86 @@ router.put('/', isLoggedIn, async (req, res, next) => {
             defaultDeliveryAddress: user.defaultDeliveryAddress,
             defaultDeliveryRequest: user.defaultDeliveryRequest,
             defaultDeliveryAddressDetail: user.defaultDeliveryAddressDetail,
+            avatar: user.avatar,
+         },
+      })
+   } catch (error) {
+      next(error)
+   }
+})
+
+// 프로필 이미지 업로드
+router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, res, next) => {
+   try {
+      if (!req.file) {
+         return res.status(400).json({ message: '이미지 파일이 필요합니다.' })
+      }
+
+      const user = await User.findByPk(req.user.id)
+      if (!user) {
+         return res.status(404).json({ message: '회원 정보를 찾을 수 없습니다.' })
+      }
+
+      const base = getBaseUrl(req)
+      const avatarUrl = `${base}/uploads/${encodeURIComponent(req.file.filename)}`
+      
+      // 기존 아바타가 있으면 삭제 (선택사항)
+      if (user.avatar && user.avatar.includes('/uploads/')) {
+         const oldFilename = user.avatar.split('/uploads/')[1]
+         if (oldFilename) {
+            try {
+               fs.unlinkSync(path.join(__dirname, '..', 'uploads', decodeURIComponent(oldFilename)))
+            } catch (err) {
+               // 파일 삭제 실패는 무시
+            }
+         }
+      }
+
+      user.avatar = avatarUrl
+      await user.save()
+
+      res.status(200).json({
+         message: '프로필 이미지가 업로드되었습니다.',
+         avatar: avatarUrl,
+      })
+   } catch (error) {
+      next(error)
+   }
+})
+
+// 전체 사용자 목록 조회 (관리자 전용)
+router.get('/all', authenticateToken, isAdmin, async (req, res, next) => {
+   try {
+      const { Op } = require('sequelize')
+      const page = parseInt(req.query.page, 10) || 1
+      const limit = parseInt(req.query.limit, 10) || 20
+      const offset = (page - 1) * limit
+      const searchTerm = (req.query.searchTerm || '').trim()
+
+      const where = {}
+      if (searchTerm) {
+         where[Op.or] = [
+            { userId: { [Op.like]: `%${searchTerm}%` } },
+            { name: { [Op.like]: `%${searchTerm}%` } },
+            { email: { [Op.like]: `%${searchTerm}%` } },
+         ]
+      }
+
+      const { rows, count } = await User.findAndCountAll({
+         where,
+         attributes: ['id', 'userId', 'name', 'email', 'phoneNumber', 'role', 'provider', 'avatar', 'createdAt'],
+         order: [['createdAt', 'DESC']],
+         limit,
+         offset,
+      })
+
+      res.status(200).json({
+         users: rows,
+         pagination: {
+            total: count,
+            page,
+            limit,
+            totalPages: Math.ceil(count / limit),
          },
       })
    } catch (error) {

@@ -85,6 +85,11 @@ module.exports = class User extends Sequelize.Model {
                allowNull: true,
                comment: '기본 배송지 상세 주소',
             },
+            avatar: {
+               type: Sequelize.STRING(500),
+               allowNull: true,
+               comment: '프로필 이미지 URL',
+            },
          },
          {
             sequelize,

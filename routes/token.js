@@ -55,13 +55,13 @@ router.get('/get', isLoggedIn, async (req, res, next) => {
 
       // 동일 (userId, host) 가 있으면 갱신, 없으면 생성
       try {
-         const [row, created] = await Domain.findOrCreate({
-            where: { userId: req.user.id, host: origin },
-            defaults: { clientToken: token },
-         })
-         if (!created) {
-            row.clientToken = token
-            await row.save()
+      const [row, created] = await Domain.findOrCreate({
+         where: { userId: req.user.id, host: origin },
+         defaults: { clientToken: token },
+      })
+      if (!created) {
+         row.clientToken = token
+         await row.save()
          }
       } catch (dbError) {
          // 데이터베이스 오류 처리

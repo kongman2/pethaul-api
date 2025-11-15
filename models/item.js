@@ -28,6 +28,12 @@ module.exports = class Item extends Sequelize.Model {
                type: Sequelize.INTEGER,
                allowNull: false,
             },
+            discountPercent: {
+               type: Sequelize.INTEGER,
+               allowNull: true,
+               defaultValue: 0,
+               comment: '할인율 (%)',
+            },
          },
          {
             sequelize,

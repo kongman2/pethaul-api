@@ -43,7 +43,7 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
          return next(error)
       }
 
-      const { itemNm, price, stockNumber, itemDetail, itemSellStatus, itemSummary } = req.body
+      const { itemNm, price, stockNumber, itemDetail, itemSellStatus, itemSummary, discountPercent } = req.body
 
       let categories = []
       try {
@@ -61,6 +61,7 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
          itemDetail,
          itemSellStatus,
          itemSummary,
+         discountPercent: discountPercent ? parseInt(discountPercent, 10) : 0,
       })
 
       // 이미지 insert
@@ -332,10 +333,10 @@ router.get('/popular-keywords', async (req, res, next) => {
       let keywords = []
       try {
          keywords = await SearchKeyword.findAll({
-            order: [['searchCount', 'DESC'], ['updatedAt', 'DESC']],
-            limit,
-            attributes: ['keyword', 'searchCount'],
-         })
+         order: [['searchCount', 'DESC'], ['updatedAt', 'DESC']],
+         limit,
+         attributes: ['keyword', 'searchCount'],
+      })
       } catch (dbError) {
          // 데이터베이스 오류 시 빈 배열 반환 (서버 크래시 방지)
          console.error('인기 검색어 조회 DB 오류:', dbError.message)
@@ -419,7 +420,14 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
          return next(error)
       }
 
-      await item.update({ itemNm, price, stockNumber, itemDetail, itemSellStatus })
+      await item.update({ 
+         itemNm, 
+         price, 
+         stockNumber, 
+         itemDetail, 
+         itemSellStatus,
+         discountPercent: discountPercent ? parseInt(discountPercent, 10) : 0,
+      })
 
       if (req.files && req.files.length > 0) {
          await ItemImage.destroy({ where: { itemId: item.id } })

@@ -14,7 +14,7 @@ module.exports = () => {
    // 매 요청 시 세션에 저장된 id를 이용해 유저 정보 복원
    passport.deserializeUser(async (id, done) => {
       try {
-         // 세션에 저장된 id를 기반으로 유저 정보를 복원
+   // 세션에 저장된 id를 기반으로 유저 정보를 복원
          const user = await User.findOne({ where: { id } })
          
          if (!user) {
