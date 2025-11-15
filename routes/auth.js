@@ -367,6 +367,25 @@ router.get(
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
+      // Google Strategy가 등록되어 있는지 확인
+      if (!passport._strategies?.google) {
+         console.error('❌ Google OAuth Strategy가 등록되지 않았습니다. (콜백 단계)')
+         const isDevelopment = process.env.NODE_ENV !== 'production'
+         const clientUrl = isDevelopment
+            ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+         return res.redirect(`${clientUrl}/login?error=google_strategy_not_found`)
+      }
+      
+      console.log('🔍 passport.authenticate 호출 전:', {
+         hasCode: !!req.query.code,
+         codeLength: req.query.code?.length,
+         hasGoogleStrategy: !!passport._strategies?.google,
+         callbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+            ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+            : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+      })
+      
       passport.authenticate('google', (err, user, info) => {
          console.log('🔍 passport.authenticate 콜백:', {
             hasError: !!err,
@@ -416,6 +435,8 @@ router.get(
          
          if (!user) {
             console.error('❌ Google OAuth 인증 실패: 사용자 정보 없음', {
+               hasError: !!err,
+               errorMessage: err?.message,
                info: info,
                hasInfo: !!info,
                infoType: typeof info,
@@ -423,37 +444,57 @@ router.get(
                infoMessage: info?.message,
                infoCode: info?.code,
                infoString: info ? JSON.stringify(info, null, 2) : null,
+               // info가 문자열인 경우도 처리
+               infoStringValue: typeof info === 'string' ? info : null,
             })
             
             // info에 에러 정보가 있는 경우
-            if (info && typeof info === 'object') {
-               console.error('❌ Google OAuth info 오류 상세:', {
-                  message: info.message,
-                  code: info.code,
-                  statusCode: info.statusCode,
-                  allKeys: Object.keys(info),
-                  fullInfo: JSON.stringify(info, null, 2),
-               })
-               
-               // 특정 에러 코드에 대한 처리
-               if (info.code === 'EAUTH' || info.message?.includes('redirect_uri_mismatch')) {
-                  console.error('❌ Redirect URI 불일치 감지:', {
-                     expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
-                        ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
-                        : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
-                     message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
+            if (info) {
+               if (typeof info === 'object') {
+                  console.error('❌ Google OAuth info 오류 상세 (객체):', {
+                     message: info.message,
+                     code: info.code,
+                     statusCode: info.statusCode,
+                     allKeys: Object.keys(info),
+                     fullInfo: JSON.stringify(info, null, 2),
                   })
+                  
+                  // 특정 에러 코드에 대한 처리
+                  if (info.code === 'EAUTH' || info.message?.includes('redirect_uri_mismatch')) {
+                     console.error('❌ Redirect URI 불일치 감지:', {
+                        expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+                           ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+                           : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+                        message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
+                     })
+                  }
+               } else if (typeof info === 'string') {
+                  console.error('❌ Google OAuth info 오류 상세 (문자열):', info)
                }
             }
             
+            // Strategy verify callback이 호출되지 않았을 가능성
+            console.error('⚠️ Google OAuth Strategy verify callback이 호출되지 않았을 수 있습니다.')
+            console.error('⚠️ 가능한 원인:')
+            console.error('   1. Google API 토큰 교환 실패 (invalid_grant, invalid_client 등)')
+            console.error('   2. Redirect URI 불일치')
+            console.error('   3. Client ID/Secret 오류')
+            console.error('   4. 네트워크 오류')
+            
             // 에러 원인을 URL 파라미터로 전달 (디버깅용)
             let errorParam = 'google_auth_failed'
-            if (info?.code === 'EAUTH' || info?.message?.includes('redirect_uri')) {
-               errorParam = 'google_auth_failed:redirect_uri_mismatch'
-            } else if (info?.message?.includes('invalid_client')) {
-               errorParam = 'google_auth_failed:invalid_client'
-            } else if (info?.message?.includes('invalid_grant')) {
-               errorParam = 'google_auth_failed:invalid_grant'
+            if (info) {
+               if (typeof info === 'object') {
+                  if (info.code === 'EAUTH' || info.message?.includes('redirect_uri')) {
+                     errorParam = 'google_auth_failed:redirect_uri_mismatch'
+                  } else if (info.message?.includes('invalid_client')) {
+                     errorParam = 'google_auth_failed:invalid_client'
+                  } else if (info.message?.includes('invalid_grant')) {
+                     errorParam = 'google_auth_failed:invalid_grant'
+                  }
+               } else if (typeof info === 'string' && info.includes('redirect_uri')) {
+                  errorParam = 'google_auth_failed:redirect_uri_mismatch'
+               }
             }
             
             const isDevelopment = process.env.NODE_ENV !== 'production'
