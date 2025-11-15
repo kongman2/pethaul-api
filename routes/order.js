@@ -1,7 +1,7 @@
 // routes/order.js
 const express = require('express')
 const { Order, OrderItem, Item, ItemImage, Cart, CartItem } = require('../models')
-const { isLoggedIn } = require('./middlewares')
+const { authenticateToken } = require('./middlewares')
 const { Op, col, fn } = require('sequelize')
 
 const router = express.Router()
@@ -9,7 +9,7 @@ const router = express.Router()
 /**
  * 주문 생성
  */
-router.post('/', isLoggedIn, async (req, res, next) => {
+router.post('/', authenticateToken, async (req, res, next) => {
    const t = await Order.sequelize.transaction()
    try {
       const { items, delivery } = req.body // [{ itemId, price, quantity }], { name, phone, address, addressDetail, request }
@@ -112,7 +112,7 @@ router.post('/', isLoggedIn, async (req, res, next) => {
 /**
  * 주문 목록 조회 (내 주문)
  */
-router.get('/', isLoggedIn, async (req, res, next) => {
+router.get('/', authenticateToken, async (req, res, next) => {
    try {
       const page = parseInt(req.query.page, 10) || 1
       const limit = parseInt(req.query.limit, 10) || 5

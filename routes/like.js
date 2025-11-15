@@ -1,6 +1,6 @@
 const express = require('express')
 const { Like, Item, ItemImage, Category } = require('../models')
-const { isLoggedIn } = require('./middlewares')
+const { authenticateToken } = require('./middlewares')
 
 const router = express.Router()
 
@@ -9,7 +9,7 @@ const router = express.Router()
  * - 조건: req.user.id
  * - 반환: 상품 id / 이름 / 가격 / 대표이미지 포함
  */
-router.get('/me', isLoggedIn, async (req, res, next) => {
+router.get('/me', authenticateToken, async (req, res, next) => {
    try {
       const likes = await Like.findAll({
          where: { userId: req.user.id },
@@ -36,7 +36,7 @@ router.get('/me', isLoggedIn, async (req, res, next) => {
    }
 })
 
-router.get('/ids', isLoggedIn, async (req, res, next) => {
+router.get('/ids', authenticateToken, async (req, res, next) => {
    try {
       const rows = await Like.findAll({
          where: { userId: req.user.id },
@@ -55,7 +55,7 @@ router.get('/ids', isLoggedIn, async (req, res, next) => {
  * - 이미 존재하면 삭제 → liked: false
  * - 없으면 생성 → liked: true
  */
-router.post('/:itemId', isLoggedIn, async (req, res, next) => {
+router.post('/:itemId', authenticateToken, async (req, res, next) => {
    try {
       const { itemId } = req.params
 

@@ -1,7 +1,7 @@
 // routes/review.js
 const express = require('express')
 const { sequelize, Review, Item, ItemImage, ReviewImage, User } = require('../models')
-const { isLoggedIn } = require('./middlewares')
+const { authenticateToken } = require('./middlewares')
 const fs = require('fs')
 const path = require('path')
 const multer = require('multer')
@@ -47,7 +47,7 @@ const upload = multer({
  * [POST] /
  * form-data: itemId, reviewDate, reviewContent, rating, img[]
  */
-router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
+router.post('/', authenticateToken, upload.array('img'), async (req, res, next) => {
    const t = await sequelize.transaction()
    try {
       const { itemId, reviewDate, reviewContent, rating } = req.body
@@ -153,7 +153,7 @@ router.delete('/:id', isLoggedIn, async (req, res, next) => {
  * 회원이 작성한 리뷰 목록 조회
  * [GET] /
  */
-router.get('/', isLoggedIn, async (req, res, next) => {
+router.get('/', authenticateToken, async (req, res, next) => {
    try {
       const page = parseInt(req.query.page, 10) || 1
       const limit = parseInt(req.query.limit, 10) || 5

@@ -9,8 +9,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
       - key: DB_DIALECT
         value: mysql
       - key: DEPLOY_DB_DIALECT

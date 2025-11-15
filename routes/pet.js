@@ -4,7 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
 const { sequelize, Pet, PetImage } = require('../models')
-const { isLoggedIn } = require('./middlewares')
+const { authenticateToken } = require('./middlewares')
 
 const router = express.Router()
 
@@ -48,7 +48,7 @@ const upload = multer({
  * [POST] /
  * form-data: petName, petType, breed, gender, age, surveyResult, (files) img[]
  */
-router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
+router.post('/', authenticateToken, upload.array('img'), async (req, res, next) => {
    const t = await sequelize.transaction()
    try {
       const { petName, petType, breed, gender, surveyResult, ageInMonths } = req.body
@@ -115,7 +115,7 @@ router.post('/', isLoggedIn, upload.array('img'), async (req, res, next) => {
  * [PUT] /edit/:id
  * form-data 가능(이미지 교체 시 img[] 포함)
  */
-router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) => {
+router.put('/edit/:id', authenticateToken, upload.array('img'), async (req, res, next) => {
    try {
       const { petName, petType, breed, gender, surveyResult, ageInMonths } = req.body
       const age = Number(req.body.age ?? 0)
@@ -176,7 +176,7 @@ router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) 
 /** 펫 삭제
  * [DELETE] /:id
  */
-router.delete('/:id', isLoggedIn, async (req, res, next) => {
+router.delete('/:id', authenticateToken, async (req, res, next) => {
    try {
       const pet = await Pet.findByPk(req.params.id)
       if (!pet) {
@@ -202,7 +202,7 @@ router.delete('/:id', isLoggedIn, async (req, res, next) => {
 /** 회원이 등록한 펫 목록 조회 (이미지 포함)
  * [GET] /
  */
-router.get('/', isLoggedIn, async (req, res, next) => {
+router.get('/', authenticateToken, async (req, res, next) => {
    try {
       const pets = await Pet.findAll({
          where: { userId: req.user.id },

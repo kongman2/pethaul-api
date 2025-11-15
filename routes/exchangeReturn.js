@@ -1,12 +1,12 @@
 const express = require('express')
 const router = express.Router()
-const { isLoggedIn, isAdmin } = require('./middlewares')
+const { authenticateToken, isAdmin } = require('./middlewares')
 const { ExchangeReturn, Order, User, Item } = require('../models')
 
 /**
  * 교환/반품 신청 (사용자)
  */
-router.post('/', isLoggedIn, async (req, res, next) => {
+router.post('/', authenticateToken, async (req, res, next) => {
    try {
       const { orderId, type, reason } = req.body
 
@@ -61,7 +61,7 @@ router.post('/', isLoggedIn, async (req, res, next) => {
 /**
  * 내 교환/반품 신청 목록 조회 (사용자)
  */
-router.get('/my', isLoggedIn, async (req, res, next) => {
+router.get('/my', authenticateToken, async (req, res, next) => {
    try {
       const exchangeReturns = await ExchangeReturn.findAll({
          where: { userId: req.user.id },

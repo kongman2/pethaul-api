@@ -120,6 +120,7 @@ const sessionMiddleware = session({
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       maxAge: 1000 * 60 * 60 * 24, // 1 day
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // OAuth 리다이렉트를 위해 필요
    },
 })
 app.use(sessionMiddleware)

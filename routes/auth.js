@@ -4,7 +4,7 @@ const crypto = require('crypto')
 const bcrypt = require('bcrypt')
 const passport = require('passport')
 const { User } = require('../models')
-const { isLoggedIn, isNotLoggedIn } = require('./middlewares')
+const { isLoggedIn, isNotLoggedIn, authenticateToken } = require('./middlewares')
 
 const router = express.Router()
 
@@ -363,7 +363,7 @@ router.put('/', isLoggedIn, async (req, res, next) => {
 })
 
 // 비밀번호 확인
-router.post('/verify', isLoggedIn, async (req, res, next) => {
+router.post('/verify', authenticateToken, async (req, res, next) => {
    try {
       const user = await User.findByPk(req.user.id)
       const { password } = req.body
