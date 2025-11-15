@@ -301,7 +301,29 @@ router.get('/check', (req, res) => {
 })
 
 // ✅ 구글 로그인 시작
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }))
+router.get('/google', (req, res, next) => {
+   console.log('🔍 Google OAuth 시작 요청:', {
+      timestamp: new Date().toISOString(),
+      headers: {
+         origin: req.headers.origin,
+         referer: req.headers.referer,
+         userAgent: req.headers['user-agent'],
+      },
+      hasGoogleStrategy: !!passport._strategies?.google,
+   })
+   
+   // Google Strategy가 등록되어 있는지 확인
+   if (!passport._strategies?.google) {
+      console.error('❌ Google OAuth Strategy가 등록되지 않았습니다.')
+      const isDevelopment = process.env.NODE_ENV !== 'production'
+      const clientUrl = isDevelopment
+         ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+         : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+      return res.redirect(`${clientUrl}/login?error=google_strategy_not_found`)
+   }
+   
+   passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next)
+})
 
 // ✅ 구글 로그인 콜백 처리
 router.get(
