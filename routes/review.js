@@ -84,7 +84,7 @@ router.post('/', authenticateToken, upload.array('img'), async (req, res, next) 
  * 리뷰 수정 (이미지 재업로드 시 전부 교체)
  * [PUT] /edit/:id
  */
-router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) => {
+router.put('/edit/:id', authenticateToken, upload.array('img'), async (req, res, next) => {
    try {
       const { itemId, reviewDate, reviewContent, rating } = req.body
       const review = await Review.findByPk(req.params.id)
@@ -124,7 +124,7 @@ router.put('/edit/:id', isLoggedIn, upload.array('img'), async (req, res, next) 
  * 리뷰 삭제
  * [DELETE] /:id
  */
-router.delete('/:id', isLoggedIn, async (req, res, next) => {
+router.delete('/:id', authenticateToken, async (req, res, next) => {
    try {
       const { id } = req.params
       const review = await Review.findByPk(id)

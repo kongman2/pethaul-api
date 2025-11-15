@@ -301,7 +301,7 @@ router.get('/all/admin', async (req, res, next) => {
 /**
  * 주문 취소 (내 주문)
  */
-router.patch('/:id/cancel', isLoggedIn, async (req, res, next) => {
+router.patch('/:id/cancel', authenticateToken, async (req, res, next) => {
    const t = await Order.sequelize.transaction()
    try {
       const order = await Order.findOne({
@@ -340,7 +340,7 @@ router.patch('/:id/cancel', isLoggedIn, async (req, res, next) => {
 /**
  * 구매 확정 (사용자)
  */
-router.patch('/:id/confirm', isLoggedIn, async (req, res, next) => {
+router.patch('/:id/confirm', authenticateToken, async (req, res, next) => {
    try {
       const order = await Order.findOne({
          where: { id: req.params.id, userId: req.user.id },
@@ -378,7 +378,7 @@ router.patch('/:id/confirm', isLoggedIn, async (req, res, next) => {
 /**
  * 주문 상세 조회 (내 주문)
  */
-router.get('/:id', isLoggedIn, async (req, res, next) => {
+router.get('/:id', authenticateToken, async (req, res, next) => {
    try {
       const order = await Order.findOne({
          where: { id: req.params.id, userId: req.user.id },
