@@ -67,7 +67,7 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
       // 이미지 insert
       const images = req.files.map((file) => ({
          oriImgName: file.originalname,
-         imgUrl: `/${file.filename}`,
+         imgUrl: `/uploads/${file.filename}`,
          repImgYn: 'N',
          itemId: item.id,
       }))
@@ -513,7 +513,7 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
          await ItemImage.destroy({ where: { itemId: item.id } })
          const images = req.files.map((file) => ({
             oriImgName: file.originalname,
-            imgUrl: `/${file.filename}`,
+            imgUrl: `/uploads/${file.filename}`,
             repImgYn: 'N',
             itemId: item.id,
          }))
