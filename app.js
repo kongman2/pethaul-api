@@ -304,19 +304,18 @@ app.use((req, res, next) => {
    next(error)
 })
 
-// Error handler (CORS 헤더 포함)
+// Error handler
 app.use((err, req, res, next) => {
    const statusCode = err.status || 500
    const errorMessage = err.message || '서버 내부 오류'
    
-   // CORS 헤더 추가 (에러 응답에도 필요) - 항상 추가하여 CORS 오류 방지
+   // CORS 헤더 추가
    const origin = req.headers.origin
    if (origin) {
       const allowedOrigins = process.env.FRONTEND_APP_URL
          ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
          : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
       
-      // Render.com 도메인은 항상 허용
       if (allowedOrigins.includes(origin) || origin.includes('onrender.com') || process.env.NODE_ENV === 'development') {
          res.setHeader('Access-Control-Allow-Origin', origin)
          res.setHeader('Access-Control-Allow-Credentials', 'true')
@@ -324,41 +323,33 @@ app.use((err, req, res, next) => {
          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
       }
    } else {
-      // origin이 없어도 기본 CORS 헤더 설정 (안전장치)
       res.setHeader('Access-Control-Allow-Origin', '*')
    }
    
-   // 응답이 이미 전송되었는지 확인
    if (res.headersSent) {
       return next(err)
    }
    
-   if (process.env.NODE_ENV === 'development') {
-      console.error('에러 상세:', err)
-      console.error('에러 스택:', err.stack)
+   if (statusCode >= 500) {
+      console.error('서버 오류:', errorMessage)
    }
    
-   try {
-      res.status(statusCode).json({ success: false, message: errorMessage, error: process.env.NODE_ENV === 'development' ? err : undefined })
-   } catch (sendError) {
-      // 응답 전송 실패 시 로깅만
-      console.error('에러 응답 전송 실패:', sendError)
-   }
+   res.status(statusCode).json({
+      success: false,
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { error: err }),
+   })
 })
 
-// 서버 크래시 방지를 위한 전역 에러 핸들러
+// Global error handlers
 process.on('uncaughtException', (error) => {
-   console.error('❌ 처리되지 않은 예외:', error)
-   console.error('스택:', error.stack)
-   // 서버를 종료하지 않고 계속 실행 (프로덕션에서는 서버 재시작 고려)
+   console.error('처리되지 않은 예외:', error.message)
 })
 
-process.on('unhandledRejection', (reason, promise) => {
-   console.error('❌ 처리되지 않은 Promise 거부:', reason)
-   console.error('Promise:', promise)
-   // 서버를 종료하지 않고 계속 실행
+process.on('unhandledRejection', (reason) => {
+   console.error('처리되지 않은 Promise 거부:', reason)
 })
 
 app.listen(app.get('port'), () => {
-   console.log(`✅ 서버가 포트 ${app.get('port')}에서 실행 중입니다.`)
+   console.log(`서버가 포트 ${app.get('port')}에서 실행 중입니다.`)
 })
