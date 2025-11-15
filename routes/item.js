@@ -159,13 +159,6 @@ router.get('/', async (req, res, next) => {
       } else {
          sellCategory = null
       }
-      
-      console.log('🔍 sellCategory 처리 결과:', { 
-         original: req.query.sellCategory, 
-         processed: sellCategory,
-         type: typeof sellCategory,
-         isArray: Array.isArray(sellCategory)
-      })
 
       const whereClause = {
          ...(searchTerm && { itemNm: { [Op.like]: `%${searchTerm}%` } }),
