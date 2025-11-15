@@ -380,9 +380,31 @@ router.get('/google/callback', async (req, res) => {
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
-      // 환경 변수 확인
+      // 환경 변수 확인 및 상세 로그
+      console.log('🔍 환경 변수 확인:', {
+         hasGOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
+         GOOGLE_CLIENT_ID_length: process.env.GOOGLE_CLIENT_ID?.length || 0,
+         GOOGLE_CLIENT_ID_prefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 15) || '없음',
+         hasGOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+         GOOGLE_CLIENT_SECRET_length: process.env.GOOGLE_CLIENT_SECRET?.length || 0,
+         NODE_ENV: process.env.NODE_ENV,
+         hasGOOGLE_CALLBACK_URL: !!process.env.GOOGLE_CALLBACK_URL,
+         GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
+         hasAPI_URL: !!process.env.API_URL,
+         API_URL: process.env.API_URL,
+      })
+      
       if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-         console.error('❌ Google OAuth 환경 변수가 설정되지 않았습니다.')
+         console.error('❌ Google OAuth 환경 변수가 설정되지 않았습니다.', {
+            GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? '설정됨' : '미설정',
+            GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '설정됨' : '미설정',
+         })
+         return res.redirect(`${clientUrl}/login?error=google_config_error`)
+      }
+      
+      // 환경 변수 값 검증
+      if (process.env.GOOGLE_CLIENT_ID.trim() === '' || process.env.GOOGLE_CLIENT_SECRET.trim() === '') {
+         console.error('❌ Google OAuth 환경 변수가 비어있습니다.')
          return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
@@ -393,15 +415,26 @@ router.get('/google/callback', async (req, res) => {
             : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`)
       
       // 1단계: code를 access_token으로 교환
-      console.log('🔄 Google OAuth 토큰 교환 시작...')
+      console.log('🔄 Google OAuth 토큰 교환 시작...', {
+         hasCode: !!req.query.code,
+         codeLength: req.query.code?.length,
+         hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+         hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+         callbackURL,
+         clientIdPrefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 10) + '...',
+      })
+      
+      // URLSearchParams 대신 수동으로 URL 인코딩 (Node.js 호환성)
+      const tokenParams = [
+         `code=${encodeURIComponent(req.query.code)}`,
+         `client_id=${encodeURIComponent(process.env.GOOGLE_CLIENT_ID)}`,
+         `client_secret=${encodeURIComponent(process.env.GOOGLE_CLIENT_SECRET)}`,
+         `redirect_uri=${encodeURIComponent(callbackURL)}`,
+         `grant_type=authorization_code`,
+      ].join('&')
+      
       const tokenResponse = await new Promise((resolve, reject) => {
-         const postData = new URLSearchParams({
-            code: req.query.code,
-            client_id: process.env.GOOGLE_CLIENT_ID,
-            client_secret: process.env.GOOGLE_CLIENT_SECRET,
-            redirect_uri: callbackURL,
-            grant_type: 'authorization_code',
-         }).toString()
+         const postData = tokenParams
          
          const options = {
             hostname: 'oauth2.googleapis.com',

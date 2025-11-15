@@ -26,6 +26,31 @@ const { sequelize } = require('./models')
 const passportConfig = require('./passport')
 
 const app = express()
+
+// 서버 시작 시 Google OAuth 환경 변수 확인 및 로그
+console.log('🔍 Google OAuth 환경 변수 확인:', {
+   hasGOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
+   GOOGLE_CLIENT_ID_length: process.env.GOOGLE_CLIENT_ID?.length || 0,
+   GOOGLE_CLIENT_ID_prefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 15) || '없음',
+   hasGOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+   GOOGLE_CLIENT_SECRET_length: process.env.GOOGLE_CLIENT_SECRET?.length || 0,
+   NODE_ENV: process.env.NODE_ENV,
+   hasGOOGLE_CALLBACK_URL: !!process.env.GOOGLE_CALLBACK_URL,
+   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
+   hasAPI_URL: !!process.env.API_URL,
+   API_URL: process.env.API_URL,
+   expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || 
+      (process.env.NODE_ENV === 'production' 
+         ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+         : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+})
+
+if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+   console.warn('⚠️ Google OAuth 환경 변수가 설정되지 않았습니다. Google 로그인을 사용할 수 없습니다.')
+} else {
+   console.log('✅ Google OAuth 환경 변수 설정 완료')
+}
+
 passportConfig()
 
 // If behind a proxy (nginx/render/heroku), uncomment:
