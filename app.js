@@ -124,10 +124,51 @@ app.use(morgan('dev'))
 // Static uploads: serve exactly at "/uploads"
 const uploadsDir = path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+
+// 이미지 파일에 대한 CORS 헤더 추가 미들웨어
+app.use('/uploads', (req, res, next) => {
+   // CORS 헤더 설정 (이미지 파일도 ORB 차단 방지)
+   const origin = req.headers.origin
+   if (origin) {
+      const allowedOrigins = process.env.FRONTEND_APP_URL
+         ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+         : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+      
+      if (allowedOrigins.includes(origin) || origin.includes('onrender.com') || process.env.NODE_ENV === 'development') {
+         res.setHeader('Access-Control-Allow-Origin', origin)
+         res.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
+   } else {
+      // origin이 없어도 기본 CORS 헤더 설정
+      res.setHeader('Access-Control-Allow-Origin', '*')
+   }
+   
+   // ORB 차단 방지를 위한 헤더
+   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
+   
+   next()
+})
+
 app.use(
    '/uploads',
    express.static(uploadsDir, {
       fallthrough: false, // not found => 404 immediately
+      setHeaders: (res, filePath) => {
+         // MIME 타입 명시적 설정 (ORB 차단 방지)
+         const ext = path.extname(filePath).toLowerCase()
+         const mimeTypes = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml',
+         }
+         if (mimeTypes[ext]) {
+            res.setHeader('Content-Type', mimeTypes[ext])
+         }
+      },
       // maxAge: '7d', // enable if you want caching
    })
 )
