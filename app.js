@@ -29,7 +29,7 @@ const app = express()
 
 // Google OAuth 환경 변수 확인
 if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-   console.warn('⚠️ Google OAuth 환경 변수가 설정되지 않았습니다. Google 로그인을 사용할 수 없습니다.')
+   console.warn('Google OAuth 환경 변수가 설정되지 않았습니다. Google 로그인을 사용할 수 없습니다.')
 }
 
 passportConfig()
@@ -45,13 +45,11 @@ async function connectDB() {
    try {
       // 먼저 연결 테스트
       await sequelize.authenticate()
-      console.log('✅ 데이터베이스 연결 성공')
+      console.log('데이터베이스 연결 성공')
       
-      // 프로덕션에서 한 번만 alter: true로 실행하여 누락된 컬럼 추가
-      // 이후에는 alter: false로 변경 권장
       const shouldAlter = process.env.NODE_ENV === 'production' && process.env.ALLOW_DB_ALTER === 'true'
       await sequelize.sync({ force: false, alter: shouldAlter })
-      console.log('✅ 데이터베이스 동기화 완료', { alter: shouldAlter })
+      console.log('데이터베이스 동기화 완료')
    } catch (err) {
       console.error('데이터베이스 연결 실패:', err.message)
       
