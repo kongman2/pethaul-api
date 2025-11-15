@@ -152,7 +152,38 @@ app.use(morgan('dev'))
 
 // Static uploads: serve exactly at "/uploads"
 const uploadsDir = path.join(__dirname, 'uploads')
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+if (!fs.existsSync(uploadsDir)) {
+   fs.mkdirSync(uploadsDir, { recursive: true })
+   console.log('✅ uploads 디렉토리 생성:', uploadsDir)
+} else {
+   // 디렉토리 내 파일 목록 확인 (디버깅용)
+   try {
+      const files = fs.readdirSync(uploadsDir)
+      console.log('✅ uploads 디렉토리 확인:', uploadsDir, `(${files.length}개 파일)`)
+   } catch (err) {
+      console.warn('⚠️ uploads 디렉토리 읽기 실패:', err.message)
+   }
+}
+
+// 파일 존재 여부 확인 및 로깅 미들웨어 (디버깅용)
+app.use('/uploads', (req, res, next) => {
+   const requestedFile = req.path.replace(/^\//, '') // 앞의 슬래시 제거
+   if (requestedFile) {
+      const filePath = path.join(uploadsDir, requestedFile)
+      // 파일 존재 여부 확인 (비동기로 확인하되 응답은 차단하지 않음)
+      fs.access(filePath, fs.constants.R_OK, (err) => {
+         if (err) {
+            console.log('⚠️ 이미지 파일 없음:', {
+               requestedPath: req.path,
+               decodedFile: decodeURIComponent(requestedFile),
+               filePath: filePath,
+               error: err.code,
+            })
+         }
+      })
+   }
+   next()
+})
 
 // 이미지 파일에 대한 CORS 및 CORB 차단 방지 헤더 추가 미들웨어
 app.use('/uploads', (req, res, next) => {
