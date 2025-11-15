@@ -27,28 +27,9 @@ const passportConfig = require('./passport')
 
 const app = express()
 
-// 서버 시작 시 Google OAuth 환경 변수 확인 및 로그
-console.log('🔍 Google OAuth 환경 변수 확인:', {
-   hasGOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
-   GOOGLE_CLIENT_ID_length: process.env.GOOGLE_CLIENT_ID?.length || 0,
-   GOOGLE_CLIENT_ID_prefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 15) || '없음',
-   hasGOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
-   GOOGLE_CLIENT_SECRET_length: process.env.GOOGLE_CLIENT_SECRET?.length || 0,
-   NODE_ENV: process.env.NODE_ENV,
-   hasGOOGLE_CALLBACK_URL: !!process.env.GOOGLE_CALLBACK_URL,
-   GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
-   hasAPI_URL: !!process.env.API_URL,
-   API_URL: process.env.API_URL,
-   expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || 
-      (process.env.NODE_ENV === 'production' 
-         ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
-         : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
-})
-
+// Google OAuth 환경 변수 확인
 if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
    console.warn('⚠️ Google OAuth 환경 변수가 설정되지 않았습니다. Google 로그인을 사용할 수 없습니다.')
-} else {
-   console.log('✅ Google OAuth 환경 변수 설정 완료')
 }
 
 passportConfig()
@@ -154,63 +135,7 @@ app.use(morgan('dev'))
 const uploadsDir = path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadsDir)) {
    fs.mkdirSync(uploadsDir, { recursive: true })
-   console.log('✅ uploads 디렉토리 생성:', uploadsDir)
-} else {
-   // 디렉토리 내 파일 목록 확인 (디버깅용)
-   try {
-      const files = fs.readdirSync(uploadsDir)
-      console.log('✅ uploads 디렉토리 확인:', uploadsDir, `(${files.length}개 파일)`)
-   } catch (err) {
-      console.warn('⚠️ uploads 디렉토리 읽기 실패:', err.message)
-   }
 }
-
-// 파일 존재 여부 확인 및 로깅 미들웨어 (디버깅용)
-app.use('/uploads', (req, res, next) => {
-   const requestedFile = req.path.replace(/^\//, '') // 앞의 슬래시 제거
-   if (requestedFile) {
-      // URL 디코딩된 파일명 사용
-      let decodedFile
-      try {
-         decodedFile = decodeURIComponent(requestedFile)
-      } catch (e) {
-         decodedFile = requestedFile
-      }
-      
-      const filePath = path.join(uploadsDir, decodedFile)
-      
-      // 파일 존재 여부 확인 (비동기로 확인하되 응답은 차단하지 않음)
-      fs.access(filePath, fs.constants.R_OK, (err) => {
-         if (err) {
-            // 디렉토리 내 실제 파일 목록 확인 (디버깅용)
-            try {
-               const files = fs.readdirSync(uploadsDir)
-               const matchingFiles = files.filter(f => 
-                  f.includes(decodedFile.split(' ')[0]) || 
-                  decodedFile.includes(f.split(' ')[0])
-               )
-               console.log('⚠️ 이미지 파일 없음:', {
-                  requestedPath: req.path,
-                  decodedFile: decodedFile,
-                  filePath: filePath,
-                  error: err.code,
-                  totalFiles: files.length,
-                  sampleFiles: files.slice(0, 5),
-                  matchingFiles: matchingFiles.slice(0, 3),
-               })
-            } catch (dirErr) {
-               console.log('⚠️ 이미지 파일 없음:', {
-                  requestedPath: req.path,
-                  decodedFile: decodedFile,
-                  filePath: filePath,
-                  error: err.code,
-               })
-            }
-         }
-      })
-   }
-   next()
-})
 
 // 이미지 파일에 대한 CORS 및 CORB 차단 방지 헤더 추가 미들웨어
 app.use('/uploads', (req, res, next) => {
@@ -240,9 +165,7 @@ app.use('/uploads', (req, res, next) => {
    next()
 })
 
-// express.static은 자동으로 URL 디코딩을 처리하지만, 
-// 파일명에 공백이나 특수문자가 있을 경우 문제가 될 수 있음
-// 커스텀 미들웨어로 URL 디코딩 처리
+// URL 디코딩된 파일명으로 이미지 서빙
 app.use('/uploads', (req, res, next) => {
    const requestedFile = req.path.replace(/^\//, '')
    if (!requestedFile) {
@@ -323,33 +246,17 @@ app.use(
 )
 
 // Legacy fallback: 루트 경로로 요청된 이미지를 /uploads로 리다이렉트
-// 예: /KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg -> /uploads/KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg
-// 라우터보다 먼저 실행되도록 위치 중요
 app.get(/^\/([^\/?]+\.(?:png|jpe?g|webp|gif|svg))$/i, (req, res, next) => {
    try {
-      // URL 디코딩된 파일명 가져오기
       const encodedFilename = req.params[0]
       const decodedFilename = decodeURIComponent(encodedFilename)
-      
-      // 파일 경로 확인
       const abs = path.join(uploadsDir, decodedFilename)
       
       fs.access(abs, fs.constants.R_OK, (err) => {
-         if (err) {
-            // 파일이 없으면 다음 미들웨어로
-            console.log('⚠️ 레거시 이미지 파일 없음:', decodedFilename)
-            return next()
-         }
-         
-         // 파일이 있으면 /uploads 경로로 리다이렉트
-         // 원본 인코딩된 파일명 사용 (공백 등이 %20으로 인코딩된 경우)
-         const redirectPath = `/uploads/${encodedFilename}`
-         console.log('✅ 레거시 이미지 리다이렉트:', req.path, '->', redirectPath)
-         res.redirect(redirectPath)
+         if (err) return next()
+         res.redirect(`/uploads/${encodedFilename}`)
       })
    } catch (error) {
-      // 디코딩 실패 시 다음 미들웨어로
-      console.warn('⚠️ 레거시 이미지 디코딩 실패:', req.path, error.message)
       next()
    }
 })

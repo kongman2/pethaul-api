@@ -201,13 +201,11 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
                // 2. JWT 토큰 생성
                try {
                   token = jwt.sign({ id: user.id, email: user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
-                  console.log('✅ JWT 토큰 생성 성공:', { userId: user.id, origin })
                } catch (jwtError) {
-                  console.error('❌ JWT 토큰 생성 실패:', jwtError.message)
+                  console.error('JWT 토큰 생성 실패:', jwtError.message)
                   throw jwtError
                }
                
-               // 3. DB에 토큰 저장
                try {
                   const [row, created] = await Domain.findOrCreate({
                      where: { userId: user.id, host: origin },
@@ -217,26 +215,12 @@ router.post('/login', isNotLoggedIn, (req, res, next) => {
                      row.clientToken = token
                      await row.save()
                   }
-                  console.log('✅ 토큰 DB 저장 성공:', { userId: user.id, origin, created })
                } catch (dbError) {
-                  console.error('❌ 토큰 DB 저장 실패:', dbError.message)
-                  console.error('DB 오류 상세:', {
-                     userId: user.id,
-                     origin,
-                     error: dbError.name,
-                     message: dbError.message,
-                  })
-                  // DB 저장 실패해도 토큰은 생성되었으므로 반환 가능
+                  console.error('토큰 DB 저장 실패:', dbError.message)
                }
             }
          } catch (tokenError) {
-            // 토큰 발급 실패해도 로그인은 성공으로 처리
-            console.error('❌ 토큰 자동 발급 실패:', {
-               message: tokenError.message,
-               stack: tokenError.stack,
-               userId: user?.id,
-               hasJWTSecret: !!process.env.JWT_SECRET,
-            })
+            console.error('토큰 자동 발급 실패:', tokenError.message)
          }
 
          return res.status(200).json({
@@ -302,12 +286,10 @@ router.get('/check', (req, res) => {
    return res.status(200).json({ isAuthenticated: false })
 })
 
-// ✅ 구글 로그인 시작 - Google OAuth 2.0 직접 구현
+// Google 로그인 시작
 router.get('/google', (req, res) => {
    try {
-      // 환경 변수 확인
       if (!process.env.GOOGLE_CLIENT_ID) {
-         console.error('❌ GOOGLE_CLIENT_ID 환경 변수가 설정되지 않았습니다.')
          const isDevelopment = process.env.NODE_ENV !== 'production'
          const clientUrl = isDevelopment
             ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
@@ -315,13 +297,11 @@ router.get('/google', (req, res) => {
          return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
-      // Callback URL 구성
       const callbackURL = process.env.GOOGLE_CALLBACK_URL || 
          (process.env.NODE_ENV === 'production' 
             ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
             : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`)
       
-      // Google OAuth 2.0 인증 URL 생성
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID)
       authUrl.searchParams.set('redirect_uri', callbackURL)
@@ -330,14 +310,9 @@ router.get('/google', (req, res) => {
       authUrl.searchParams.set('access_type', 'offline')
       authUrl.searchParams.set('prompt', 'consent')
       
-      console.log('✅ Google OAuth 리다이렉트:', {
-         callbackURL,
-         clientId: process.env.GOOGLE_CLIENT_ID.substring(0, 10) + '...',
-      })
-      
       res.redirect(authUrl.toString())
    } catch (error) {
-      console.error('❌ Google OAuth 시작 오류:', error)
+      console.error('Google OAuth 시작 오류:', error.message)
       const isDevelopment = process.env.NODE_ENV !== 'production'
       const clientUrl = isDevelopment
          ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
@@ -346,7 +321,7 @@ router.get('/google', (req, res) => {
    }
 })
 
-// ✅ 구글 로그인 콜백 처리 - Google OAuth 2.0 직접 구현 (실무 표준 방식)
+// Google 로그인 콜백 처리
 router.get('/google/callback', async (req, res) => {
    const isDevelopment = process.env.NODE_ENV !== 'production'
    const clientUrl = isDevelopment
@@ -354,57 +329,25 @@ router.get('/google/callback', async (req, res) => {
       : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
    
    try {
-      console.log('🔍 Google OAuth 콜백 시작:', {
-         hasCode: !!req.query.code,
-         hasError: !!req.query.error,
-         error: req.query.error,
-         errorDescription: req.query.error_description,
-      })
-      
-      // Google에서 에러를 반환한 경우
       if (req.query.error) {
-         console.error('❌ Google OAuth 에러 응답:', {
-            error: req.query.error,
-            errorDescription: req.query.error_description,
-         })
-         
          if (req.query.error === 'access_denied') {
             return res.redirect(`${clientUrl}/login?error=access_denied`)
          }
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
-      // code가 없으면 에러
       if (!req.query.code) {
-         console.error('❌ Google OAuth code 없음')
+         console.error('Google OAuth: code 없음')
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
-      // 환경 변수 확인 및 상세 로그
-      console.log('🔍 환경 변수 확인:', {
-         hasGOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
-         GOOGLE_CLIENT_ID_length: process.env.GOOGLE_CLIENT_ID?.length || 0,
-         GOOGLE_CLIENT_ID_prefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 15) || '없음',
-         hasGOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
-         GOOGLE_CLIENT_SECRET_length: process.env.GOOGLE_CLIENT_SECRET?.length || 0,
-         NODE_ENV: process.env.NODE_ENV,
-         hasGOOGLE_CALLBACK_URL: !!process.env.GOOGLE_CALLBACK_URL,
-         GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
-         hasAPI_URL: !!process.env.API_URL,
-         API_URL: process.env.API_URL,
-      })
-      
       if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-         console.error('❌ Google OAuth 환경 변수가 설정되지 않았습니다.', {
-            GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? '설정됨' : '미설정',
-            GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '설정됨' : '미설정',
-         })
+         console.error('Google OAuth: 환경 변수 미설정')
          return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
-      // 환경 변수 값 검증
       if (process.env.GOOGLE_CLIENT_ID.trim() === '' || process.env.GOOGLE_CLIENT_SECRET.trim() === '') {
-         console.error('❌ Google OAuth 환경 변수가 비어있습니다.')
+         console.error('Google OAuth: 환경 변수 비어있음')
          return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
@@ -452,55 +395,26 @@ router.get('/google/callback', async (req, res) => {
             resToken.on('end', () => {
                try {
                   const parsed = JSON.parse(data)
-                  console.log('🔍 Google 토큰 교환 응답:', {
-                     statusCode: resToken.statusCode,
-                     hasAccessToken: !!parsed.access_token,
-                     hasError: !!parsed.error,
-                     error: parsed.error,
-                     errorDescription: parsed.error_description,
-                     errorUri: parsed.error_uri,
-                  })
                   
                   if (resToken.statusCode === 200) {
                      resolve(parsed)
                   } else {
-                     console.error('❌ Google 토큰 교환 실패:', {
+                     console.error('Google 토큰 교환 실패:', {
                         statusCode: resToken.statusCode,
-                        response: parsed,
-                        fullResponse: JSON.stringify(parsed, null, 2),
+                        error: parsed.error,
+                        errorDescription: parsed.error_description,
                      })
-                     
-                     // 특정 에러에 대한 상세 로그
-                     if (parsed.error === 'invalid_grant') {
-                        console.error('❌ invalid_grant 오류 - 가능한 원인:')
-                        console.error('   1. Authorization code가 이미 사용되었거나 만료됨')
-                        console.error('   2. Redirect URI가 Google Cloud Console에 등록된 것과 일치하지 않음')
-                        console.error('   3. Client ID/Secret이 잘못됨')
-                        console.error('   등록된 Callback URL:', callbackURL)
-                     } else if (parsed.error === 'redirect_uri_mismatch') {
-                        console.error('❌ redirect_uri_mismatch 오류:')
-                        console.error('   사용된 Callback URL:', callbackURL)
-                        console.error('   Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.')
-                     } else if (parsed.error === 'invalid_client') {
-                        console.error('❌ invalid_client 오류:')
-                        console.error('   Client ID 또는 Client Secret이 잘못되었습니다.')
-                        console.error('   Client ID prefix:', process.env.GOOGLE_CLIENT_ID?.substring(0, 15))
-                     }
-                     
                      reject(new Error(parsed.error_description || parsed.error || 'Token exchange failed'))
                   }
                } catch (err) {
-                  console.error('❌ Google 토큰 교환 응답 파싱 오류:', {
-                     error: err.message,
-                     rawData: data.substring(0, 500),
-                  })
+                  console.error('Google 토큰 교환 응답 파싱 오류:', err.message)
                   reject(err)
                }
             })
          })
          
          reqToken.on('error', (err) => {
-            console.error('❌ Google 토큰 교환 네트워크 오류:', err)
+            console.error('Google 토큰 교환 네트워크 오류:', err.message)
             reject(err)
          })
          
@@ -510,14 +424,11 @@ router.get('/google/callback', async (req, res) => {
       
       const { access_token } = tokenResponse
       if (!access_token) {
-         console.error('❌ access_token이 없습니다:', tokenResponse)
+         console.error('Google OAuth: access_token 없음')
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
       
-      console.log('✅ Google OAuth 토큰 교환 성공')
-      
       // 2단계: access_token으로 사용자 정보 가져오기
-      console.log('🔄 Google 사용자 정보 가져오기 시작...')
       const userInfo = await new Promise((resolve, reject) => {
          const options = {
             hostname: 'www.googleapis.com',
@@ -537,9 +448,9 @@ router.get('/google/callback', async (req, res) => {
                   if (resUserInfo.statusCode === 200) {
                      resolve(parsed)
                   } else {
-                     console.error('❌ Google 사용자 정보 가져오기 실패:', {
+                     console.error('Google 사용자 정보 가져오기 실패:', {
                         statusCode: resUserInfo.statusCode,
-                        response: parsed,
+                        error: parsed.error?.message,
                      })
                      reject(new Error(parsed.error?.message || 'Failed to get user info'))
                   }
@@ -548,21 +459,15 @@ router.get('/google/callback', async (req, res) => {
                }
             })
          }).on('error', (err) => {
-            console.error('❌ Google 사용자 정보 네트워크 오류:', err)
+            console.error('Google 사용자 정보 네트워크 오류:', err.message)
             reject(err)
          })
       })
       
       if (!userInfo.email) {
-         console.error('❌ Google 사용자 정보에 이메일이 없습니다:', userInfo)
+         console.error('Google OAuth: 사용자 정보에 이메일 없음')
          return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
       }
-      
-      console.log('✅ Google 사용자 정보 가져오기 성공:', {
-         email: userInfo.email,
-         name: userInfo.name,
-         id: userInfo.id,
-      })
       
       // 3단계: 사용자 조회 또는 생성
       let user = await User.findOne({
@@ -570,18 +475,11 @@ router.get('/google/callback', async (req, res) => {
       })
       
       if (user) {
-         // 기존 사용자
-         console.log('✅ 기존 사용자 로그인:', { userId: user.id, email: user.email })
-         
-         // provider 업데이트
          if (user.provider !== 'google') {
             await user.update({ provider: 'google' })
             user = await User.findOne({ where: { id: user.id } })
          }
       } else {
-         // 새 사용자 생성
-         console.log('📝 새 사용자 생성 시작:', { email: userInfo.email, name: userInfo.name })
-         
          let userId = `google_${userInfo.id}`
          let existingUserWithId = await User.findOne({ where: { userId } })
          let counter = 1
@@ -598,18 +496,14 @@ router.get('/google/callback', async (req, res) => {
             password: null,
             provider: 'google',
          })
-         
-         console.log('✅ 새 사용자 생성 완료:', { userId: user.id, email: user.email })
       }
       
       // 4단계: 세션 로그인
       req.logIn(user, { session: true }, async (loginErr) => {
          if (loginErr) {
-            console.error('❌ 세션 로그인 오류:', loginErr)
+            console.error('세션 로그인 오류:', loginErr.message)
             return res.redirect(`${clientUrl}/login?error=session_failed`)
          }
-         
-         console.log('✅ 세션 로그인 성공:', { userId: user.id, email: user.email })
          
          // 5단계: JWT 토큰 발급
          let token = null
@@ -625,7 +519,6 @@ router.get('/google/callback', async (req, res) => {
                   { expiresIn: '365d', issuer: 'pethaul' }
                )
                
-               // DB에 토큰 저장
                const [row] = await Domain.findOrCreate({
                   where: { userId: user.id, host: origin },
                   defaults: { clientToken: token },
@@ -634,12 +527,9 @@ router.get('/google/callback', async (req, res) => {
                   row.clientToken = token
                   await row.save()
                }
-               
-               console.log('✅ JWT 토큰 발급 완료:', { userId: user.id })
             }
          } catch (tokenError) {
-            console.error('❌ JWT 토큰 발급 실패:', tokenError.message)
-            // 토큰 발급 실패해도 로그인은 성공으로 처리
+            console.error('JWT 토큰 발급 실패:', tokenError.message)
          }
          
          // 6단계: 프론트엔드로 리다이렉트
@@ -647,15 +537,10 @@ router.get('/google/callback', async (req, res) => {
             ? `${clientUrl}/google-success?token=${encodeURIComponent(token)}`
             : `${clientUrl}/google-success`
          
-         console.log('✅ Google 로그인 성공, 리다이렉트:', redirectUrl)
          return res.redirect(redirectUrl)
       })
    } catch (error) {
-      console.error('❌ Google OAuth 콜백 오류:', {
-         message: error.message,
-         stack: error.stack,
-         name: error.name,
-      })
+      console.error('Google OAuth 콜백 오류:', error.message)
       return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
    }
 })
