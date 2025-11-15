@@ -132,12 +132,18 @@ app.use(
    })
 )
 
-// (Optional) Legacy fallback for old absolute file links like "/hero_*.jpg"
-// If you don't need this, feel free to delete this handler.
+// Legacy fallback: 루트 경로로 요청된 이미지를 /uploads로 리다이렉트
+// 예: /KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg -> /uploads/KakaoTalk_Photo_2024-12-10-18-32-23%200131763214621170.jpeg
 app.get(/^\/(?:[^\/]+\.(?:png|jpe?g|webp|gif|svg))$/i, (req, res, next) => {
    const filename = path.basename(decodeURIComponent(req.path.slice(1)))
    const abs = path.join(uploadsDir, filename)
-   fs.access(abs, fs.constants.R_OK, (err) => (err ? next() : res.sendFile(abs)))
+   fs.access(abs, fs.constants.R_OK, (err) => {
+      if (err) {
+         return next() // 파일이 없으면 다음 미들웨어로
+      }
+      // 파일이 있으면 /uploads 경로로 리다이렉트
+      res.redirect(`/uploads/${encodeURIComponent(filename)}`)
+   })
 })
 
 app.use(express.json())
