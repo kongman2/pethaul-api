@@ -23,14 +23,25 @@ exports.authenticateToken = async (req, res, next) => {
    if (authHeader) {
       try {
          // AUTH_KEY와 토큰 구분 (AUTH_KEY는 공개 API용이므로 토큰 검증 건너뛰기)
-         // AUTH_KEY는 환경변수에서 가져온 값과 비교
-         if (authHeader === process.env.AUTH_KEY) {
+         // AUTH_KEY는 환경변수에서 가져온 값과 비교 (환경변수가 없으면 건너뛰기)
+         if (process.env.AUTH_KEY && authHeader === process.env.AUTH_KEY) {
             // AUTH_KEY인 경우 세션 확인으로 폴백
             if (req.isAuthenticated() && req.user) {
                return next()
             }
             const error = new Error('로그인이 필요합니다.')
             error.status = 401
+            return next(error)
+         }
+
+         // JWT_SECRET이 없으면 에러
+         if (!process.env.JWT_SECRET) {
+            // JWT_SECRET이 없으면 세션 확인으로 폴백
+            if (req.isAuthenticated() && req.user) {
+               return next()
+            }
+            const error = new Error('서버 설정 오류: JWT_SECRET이 설정되어 있지 않습니다.')
+            error.status = 500
             return next(error)
          }
 

@@ -80,10 +80,33 @@ connectDB()
 
 // Middleware
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
+
+// CORS 설정: 여러 origin 허용 및 환경변수 폴백
+const allowedOrigins = process.env.FRONTEND_APP_URL
+   ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+   : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+
 app.use(
    cors({
-      origin: process.env.FRONTEND_APP_URL, // e.g. http://localhost:5173
+      origin: (origin, callback) => {
+         // origin이 없으면 (같은 도메인 요청 등) 허용
+         if (!origin) return callback(null, true)
+         
+         // 허용된 origin인지 확인
+         if (allowedOrigins.includes(origin)) {
+            callback(null, true)
+         } else {
+            // 개발 환경에서는 모든 origin 허용 (디버깅용)
+            if (process.env.NODE_ENV === 'development') {
+               callback(null, true)
+            } else {
+               callback(new Error('CORS 정책에 의해 차단되었습니다.'))
+            }
+         }
+      },
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
    })
 )
 app.use(morgan('dev'))
