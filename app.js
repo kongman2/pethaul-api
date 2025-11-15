@@ -53,36 +53,16 @@ async function connectDB() {
       await sequelize.sync({ force: false, alter: shouldAlter })
       console.log('✅ 데이터베이스 동기화 완료', { alter: shouldAlter })
    } catch (err) {
-      console.error('❌ 데이터베이스 연결 실패')
-      
-      // 환경 변수 확인
-      const env = process.env.NODE_ENV || 'development'
-      if (env === 'production') {
-         console.error('\n📋 프로덕션 환경 변수 확인:')
-         console.error('  NODE_ENV:', process.env.NODE_ENV)
-         console.error('  DEPLOY_DB_USERNAME:', process.env.DEPLOY_DB_USERNAME ? '✅ 설정됨' : '❌ 미설정')
-         console.error('  DEPLOY_DB_PASSWORD:', process.env.DEPLOY_DB_PASSWORD ? '✅ 설정됨' : '❌ 미설정')
-         console.error('  DEPLOY_DB_NAME:', process.env.DEPLOY_DB_NAME || '❌ 미설정')
-         console.error('  DEPLOY_DB_HOST:', process.env.DEPLOY_DB_HOST || '❌ 미설정')
-         console.error('  DEPLOY_DB_DIALECT:', process.env.DEPLOY_DB_DIALECT || 'mysql (기본값)')
-      }
+      console.error('데이터베이스 연결 실패:', err.message)
       
       if (err.original) {
-         console.error('\n🔍 연결 에러 상세:')
-         console.error('  원본 에러:', err.original.message)
-         console.error('  에러 코드:', err.original.code)
+         console.error('연결 에러:', err.original.message)
          if (err.original.code === 'ECONNREFUSED') {
-            console.error('\n💡 해결 방법:')
-            console.error('  1. DEPLOY_DB_HOST가 올바른지 확인하세요')
-            console.error('  2. 데이터베이스 서버가 실행 중인지 확인하세요')
-            console.error('  3. 방화벽 설정에서 Render IP가 허용되어 있는지 확인하세요')
-            console.error('  4. 포트 번호가 포함되어 있는지 확인하세요 (예: hostname:3306)')
+            console.error('데이터베이스 서버 연결 거부됨. 호스트 및 포트 확인 필요')
          }
-      } else {
-         console.error('에러 메시지:', err.message)
       }
       
-      process.exit(1) // 서버 시작 실패 시 종료
+      process.exit(1)
    }
 }
 
