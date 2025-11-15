@@ -12,9 +12,15 @@ const router = express.Router()
  */
 router.get('/get', isLoggedIn, async (req, res, next) => {
    try {
-      // req.user 확인
-      if (!req.user || !req.user.id) {
-         const error = new Error('사용자 정보를 찾을 수 없습니다.')
+      // req.user 확인 (isLoggedIn 미들웨어를 통과했지만 req.user가 없을 수 있음)
+      if (!req.user) {
+         const error = new Error('사용자 정보를 찾을 수 없습니다. 세션이 만료되었거나 유효하지 않습니다.')
+         error.status = 401
+         return next(error)
+      }
+
+      if (!req.user.id) {
+         const error = new Error('사용자 ID를 찾을 수 없습니다.')
          error.status = 401
          return next(error)
       }
@@ -28,21 +34,42 @@ router.get('/get', isLoggedIn, async (req, res, next) => {
          return next(error)
       }
 
-      const token = jwt.sign({ id: req.user.id, email: req.user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+      // JWT 토큰 생성
+      let token
+      try {
+         token = jwt.sign({ id: req.user.id, email: req.user.email || '' }, process.env.JWT_SECRET, { expiresIn: '365d', issuer: 'pethaul' })
+      } catch (jwtError) {
+         const error = new Error('토큰 생성 중 오류가 발생했습니다.')
+         error.status = 500
+         if (process.env.NODE_ENV === 'development') {
+            console.error('JWT 생성 오류:', jwtError)
+         }
+         return next(error)
+      }
 
       // 동일 (userId, host) 가 있으면 갱신, 없으면 생성
-      const [row, created] = await Domain.findOrCreate({
-         where: { userId: req.user.id, host: origin },
-         defaults: { clientToken: token },
-      })
-      if (!created) {
-         row.clientToken = token
-         await row.save()
+      try {
+         const [row, created] = await Domain.findOrCreate({
+            where: { userId: req.user.id, host: origin },
+            defaults: { clientToken: token },
+         })
+         if (!created) {
+            row.clientToken = token
+            await row.save()
+         }
+      } catch (dbError) {
+         // 데이터베이스 오류 처리
+         const error = new Error('토큰 저장 중 오류가 발생했습니다.')
+         error.status = 500
+         if (process.env.NODE_ENV === 'development') {
+            console.error('DB 오류:', dbError)
+         }
+         return next(error)
       }
 
       return res.json({ success: true, message: '토큰이 발급되었습니다.', token })
    } catch (error) {
-      // 에러 로깅 (개발 환경에서만)
+      // 예상치 못한 오류 처리
       if (process.env.NODE_ENV === 'development') {
          console.error('토큰 발급 오류:', error)
          console.error('req.user:', req.user)
