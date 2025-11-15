@@ -311,35 +311,87 @@ router.get(
          query: req.query,
          hasCode: !!req.query.code,
          hasError: !!req.query.error,
+         error: req.query.error,
+         errorDescription: req.query.error_description,
+         code: req.query.code ? `${req.query.code.substring(0, 20)}...` : null,
       })
+      
+      // Google에서 에러를 반환한 경우
+      if (req.query.error) {
+         console.error('❌ Google OAuth 에러 응답:', {
+            error: req.query.error,
+            errorDescription: req.query.error_description,
+            errorUri: req.query.error_uri,
+         })
+         
+         // 특정 에러에 대한 재시도 로직
+         if (req.query.error === 'access_denied') {
+            // 사용자가 권한을 거부한 경우
+            const isDevelopment = process.env.NODE_ENV !== 'production'
+            const clientUrl = isDevelopment
+               ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+               : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+            return res.redirect(`${clientUrl}/login?error=access_denied`)
+         }
+      }
+      
+      // code가 없으면 에러
+      if (!req.query.code) {
+         console.error('❌ Google OAuth code 없음:', { query: req.query })
+         const isDevelopment = process.env.NODE_ENV !== 'production'
+         const clientUrl = isDevelopment
+            ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+         return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
+      }
       
       passport.authenticate('google', (err, user, info) => {
          console.log('🔍 passport.authenticate 콜백:', {
             hasError: !!err,
+            errorMessage: err?.message,
+            errorCode: err?.code,
             hasUser: !!user,
             userType: user ? typeof user : null,
             userId: user?.id,
             userEmail: user?.email,
             hasInfo: !!info,
             info: info,
+            infoType: typeof info,
+            infoKeys: info ? Object.keys(info) : null,
+            infoMessage: info?.message,
          })
          
          if (err) {
-            console.error('❌ Google OAuth 인증 오류:', {
+            console.error('❌ Google OAuth 인증 오류 상세:', {
                message: err.message,
                stack: err.stack,
                name: err.name,
                code: err.code,
                statusCode: err.statusCode,
                info: info,
+               // Google OAuth 특정 에러 코드 확인
+               isRedirectUriMismatch: err.message?.includes('redirect_uri_mismatch') || err.message?.includes('redirect_uri'),
+               isInvalidClient: err.message?.includes('invalid_client'),
+               isInvalidGrant: err.message?.includes('invalid_grant'),
             })
-            // 에러 발생 시에도 프론트엔드로 리다이렉트 (사용자 경험 개선)
+            
+            // redirect_uri_mismatch 에러인 경우 상세 로그
+            if (err.message?.includes('redirect_uri_mismatch') || err.message?.includes('redirect_uri')) {
+               console.error('❌ Redirect URI 불일치 오류:', {
+                  expectedCallbackURL: process.env.GOOGLE_CALLBACK_URL || (process.env.NODE_ENV === 'production' 
+                     ? `${process.env.API_URL || 'https://pethaul-api.onrender.com'}/auth/google/callback`
+                     : `http://localhost:${process.env.PORT || 8002}/auth/google/callback`),
+                  message: 'Google Cloud Console의 Authorized redirect URIs에 위 URL이 정확히 일치하는지 확인하세요.',
+               })
+            }
+            
             const isDevelopment = process.env.NODE_ENV !== 'production'
             const clientUrl = isDevelopment
                ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
                : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
             return res.redirect(`${clientUrl}/login?error=google_auth_failed`)
          }
+         
          if (!user) {
             console.warn('⚠️ Google OAuth 인증 실패: 사용자 정보 없음', {
                info: info,
@@ -347,7 +399,19 @@ router.get(
                infoType: typeof info,
                infoKeys: info ? Object.keys(info) : null,
                infoMessage: info?.message,
+               infoCode: info?.code,
             })
+            
+            // info에 에러 정보가 있는 경우
+            if (info && typeof info === 'object') {
+               console.error('❌ Google OAuth info 오류:', {
+                  message: info.message,
+                  code: info.code,
+                  statusCode: info.statusCode,
+                  allKeys: Object.keys(info),
+               })
+            }
+            
             const isDevelopment = process.env.NODE_ENV !== 'production'
             const clientUrl = isDevelopment
                ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
@@ -365,11 +429,24 @@ router.get(
                   stack: loginErr.stack,
                   name: loginErr.name,
                })
-               const isDevelopment = process.env.NODE_ENV !== 'production'
-               const clientUrl = isDevelopment
-                  ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-                  : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
-               return res.redirect(`${clientUrl}/login?error=session_failed`)
+               
+               // 세션 로그인 실패 시에도 재시도
+               console.log('🔄 세션 로그인 재시도...')
+               setTimeout(() => {
+                  req.logIn(user, { session: true }, (retryErr) => {
+                     if (retryErr) {
+                        console.error('❌ 세션 로그인 재시도 실패:', retryErr.message)
+                        const isDevelopment = process.env.NODE_ENV !== 'production'
+                        const clientUrl = isDevelopment
+                           ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
+                           : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+                        return res.redirect(`${clientUrl}/login?error=session_failed`)
+                     }
+                     console.log('✅ 세션 로그인 재시도 성공')
+                     next()
+                  })
+               }, 200)
+               return
             }
             
             console.log('✅ 세션 로그인 성공:', {
@@ -378,7 +455,25 @@ router.get(
                userId: req.user?.id,
             })
             
-            next()
+            // req.user가 아직 설정되지 않았을 수 있으므로 재시도
+            if (!req.user) {
+               console.log('⚠️ req.user 없음, 대기 후 재시도...')
+               let retryCount = 0
+               const checkUser = setInterval(() => {
+                  retryCount++
+                  if (req.user || retryCount >= 5) {
+                     clearInterval(checkUser)
+                     if (req.user) {
+                        console.log('✅ req.user 복원 성공:', { userId: req.user.id })
+                     } else {
+                        console.warn('⚠️ req.user 복원 실패, 계속 진행')
+                     }
+                     next()
+                  }
+               }, 200)
+            } else {
+               next()
+            }
          })
       })(req, res, next)
    },
