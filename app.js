@@ -72,7 +72,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 // CORS 설정: 여러 origin 허용 및 환경변수 폴백
 const allowedOrigins = process.env.FRONTEND_APP_URL
    ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
-   : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+   : ['http://localhost:5173', 'https://pethaul.vercel.app']
 
 // CORS 미들웨어 설정
 const corsOptions = {
@@ -88,8 +88,8 @@ const corsOptions = {
          if (process.env.NODE_ENV === 'development') {
             callback(null, true)
          } else {
-            // 프로덕션에서는 Render.com 도메인도 허용 (안전장치)
-            if (origin.includes('onrender.com')) {
+            // 프로덕션에서는 Vercel 도메인도 허용 (안전장치)
+            if (origin.includes('vercel.app')) {
                callback(null, true)
             } else {
                callback(new Error('CORS 정책에 의해 차단되었습니다.'))
@@ -122,9 +122,9 @@ app.use('/uploads', (req, res, next) => {
    if (origin) {
       const allowedOrigins = process.env.FRONTEND_APP_URL
          ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
-         : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+         : ['http://localhost:5173', 'https://pethaul.vercel.app']
       
-      if (allowedOrigins.includes(origin) || origin.includes('onrender.com') || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.includes(origin) || origin.includes('vercel.app') || process.env.NODE_ENV === 'development') {
          res.setHeader('Access-Control-Allow-Origin', origin)
          res.setHeader('Access-Control-Allow-Credentials', 'true')
       }
@@ -292,9 +292,9 @@ app.use((err, req, res, next) => {
    if (origin) {
       const allowedOrigins = process.env.FRONTEND_APP_URL
          ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
-         : ['http://localhost:5173', 'https://pethaul-frontend.onrender.com']
+         : ['http://localhost:5173', 'https://pethaul.vercel.app']
       
-      if (allowedOrigins.includes(origin) || origin.includes('onrender.com') || process.env.NODE_ENV === 'development') {
+      if (allowedOrigins.includes(origin) || origin.includes('vercel.app') || process.env.NODE_ENV === 'development') {
          res.setHeader('Access-Control-Allow-Origin', origin)
          res.setHeader('Access-Control-Allow-Credentials', 'true')
          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')

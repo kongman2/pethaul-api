@@ -293,7 +293,7 @@ router.get('/google', (req, res) => {
          const isDevelopment = process.env.NODE_ENV !== 'production'
          const clientUrl = isDevelopment
             ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+            : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul.vercel.app')
          return res.redirect(`${clientUrl}/login?error=google_config_error`)
       }
       
@@ -326,7 +326,7 @@ router.get('/google/callback', async (req, res) => {
    const isDevelopment = process.env.NODE_ENV !== 'production'
    const clientUrl = isDevelopment
       ? (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'http://localhost:5173')
-      : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul-frontend.onrender.com')
+      : (process.env.CLIENT_URL || process.env.FRONTEND_APP_URL || 'https://pethaul.vercel.app')
    
    try {
       if (req.query.error) {
