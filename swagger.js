@@ -5,17 +5,17 @@ const options = {
    definition: {
       openapi: '3.0.0', // Swagger(OpenAPI) 문서의 버전
       info: {
-         title: 'Shopmax API',
+         title: 'Pethaul API',
          version: '1.0.0',
-         description: 'Shopmax API 문서입니다.',
+         description: 'Pethaul API 문서입니다.',
       },
       servers: [
          {
-            url: process.env.APP_API_URL, // 실제 서버 주소
+            url: process.env.APP_API_URL || 'http://localhost:8002', // 실제 서버 주소
          },
       ],
    },
-   apis: ['./routes/*.js'], // Swagger 주석이 달린 파일 경로
+   apis: ['./routes-swagger/*.js'], // Swagger 주석이 달린 파일 경로
 }
 
 const swaggerSpec = swaggerJSDoc(options)
