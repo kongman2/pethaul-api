@@ -166,9 +166,10 @@ AUTH_KEY=your_auth_key
    - `DB_DIALECT=mysql`
    - `COOKIE_SECRET`
    - `JWT_SECRET`
-   - `FRONTEND_APP_URL`
-   - `CLIENT_URL`
+   - `FRONTEND_APP_URL` (또는 `CLIENT_URL`) - **Vercel 프론트엔드 URL로 설정** (예: `https://your-app.vercel.app`)
    - 데이터베이스 연결 정보
+   
+   > ⚠️ **중요**: `FRONTEND_APP_URL` 또는 `CLIENT_URL`을 Vercel에 배포된 프론트엔드 URL로 설정해야 Google OAuth 리다이렉트가 정상 작동합니다.
 
 3. **배포 확인**
    - 배포 완료 후 제공되는 URL로 접속
