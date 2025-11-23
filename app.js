@@ -23,7 +23,9 @@ const contentRouter = require('./routes/content')
 const qnaRouter = require('./routes/qna')
 const exchangeReturnRouter = require('./routes/exchangeReturn')
 const { sequelize } = require('./models')
+const { User } = require('./models')
 const passportConfig = require('./passport')
+const bcrypt = require('bcrypt')
 
 const app = express()
 
@@ -40,6 +42,55 @@ app.set('trust proxy', 1)
 // Port
 app.set('port', process.env.PORT || 8002)
 
+// 관리자 계정 자동 생성 함수
+async function ensureAdminAccount() {
+   try {
+      const adminUserId = process.env.ADMIN_USER_ID || 'admin'
+      const adminPassword = process.env.ADMIN_PASSWORD || 'admin123!'
+      const adminName = process.env.ADMIN_NAME || '관리자'
+      const adminEmail = process.env.ADMIN_EMAIL || 'admin@pethaul.com'
+
+      // 기존 관리자 계정 확인
+      const existingAdmin = await User.findOne({ where: { userId: adminUserId } })
+      
+      if (existingAdmin) {
+         // 이미 존재하는 경우 role만 업데이트
+         if (existingAdmin.role !== 'ADMIN') {
+            await existingAdmin.update({ role: 'ADMIN' })
+            console.log(`✅ 기존 사용자 '${adminUserId}'의 권한을 관리자로 변경했습니다.`)
+         }
+         
+         // 비밀번호 업데이트 여부 확인
+         if (process.env.ADMIN_PASSWORD) {
+            const hashedPassword = await bcrypt.hash(adminPassword, 10)
+            await existingAdmin.update({ password: hashedPassword })
+            console.log(`✅ 관리자 계정 비밀번호를 업데이트했습니다.`)
+         }
+         
+         return
+      }
+
+      // 새 관리자 계정 생성
+      const hashedPassword = await bcrypt.hash(adminPassword, 10)
+      
+      await User.create({
+         userId: adminUserId,
+         name: adminName,
+         email: adminEmail,
+         password: hashedPassword,
+         role: 'ADMIN',
+         provider: 'local',
+      })
+
+      console.log('✅ 관리자 계정이 자동 생성되었습니다.')
+      console.log(`   ID: ${adminUserId}`)
+      console.log(`   이메일: ${adminEmail}`)
+   } catch (error) {
+      console.error('⚠️ 관리자 계정 생성 실패:', error.message)
+      // 관리자 계정 생성 실패해도 서버는 계속 실행
+   }
+}
+
 // DB 연결 테스트 및 동기화
 async function connectDB() {
    try {
@@ -50,6 +101,9 @@ async function connectDB() {
       const shouldAlter = process.env.NODE_ENV === 'production' && process.env.ALLOW_DB_ALTER === 'true'
       await sequelize.sync({ force: false, alter: shouldAlter })
       console.log('데이터베이스 동기화 완료')
+      
+      // 관리자 계정 확인 및 생성
+      await ensureAdminAccount()
    } catch (err) {
       console.error('데이터베이스 연결 실패:', err.message)
       
