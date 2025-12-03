@@ -612,7 +612,7 @@ router.get('/:id', async (req, res, next) => {
  */
 router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, next) => {
    try {
-      const { itemNm, price, stockNumber, itemDetail, itemSellStatus, categories } = req.body
+      const { itemNm, price, stockNumber, itemDetail, itemSellStatus, itemSummary, discountPercent, categories } = req.body
 
       let parsedCategories = []
       try {
@@ -636,6 +636,7 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
          stockNumber, 
          itemDetail, 
          itemSellStatus,
+         itemSummary,
          discountPercent: discountPercent ? parseInt(discountPercent, 10) : 0,
       })
 
