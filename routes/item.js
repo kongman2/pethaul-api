@@ -87,11 +87,10 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
          discountPercent: discountPercent ? parseInt(discountPercent, 10) : 0,
       })
 
-      // 이미지 insert
-      const base = getBaseUrl(req)
+      // 이미지 insert (상대 경로로 저장 - 프론트엔드에서 buildImageUrl로 처리)
       const images = req.files.map((file) => ({
-         oriImgName: file.originalname,
-         imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
+         oriImgName: truncateFileName(file.originalname),
+         imgUrl: `/uploads/${encodeURIComponent(file.filename)}`,
          repImgYn: 'N',
          itemId: item.id,
       }))
@@ -440,7 +439,7 @@ router.get('/all/main', async (req, res, next) => {
             include: [
                {
                   model: ItemImage,
-                  attributes: ['imgUrl'],
+                  attributes: ['id', 'imgUrl', 'repImgYn'],
                   where: { repImgYn: 'Y' },
                   required: false,
                   separate: true,
@@ -477,7 +476,7 @@ router.get('/all/main', async (req, res, next) => {
             include: [
                {
                   model: ItemImage,
-                  attributes: ['imgUrl'],
+                  attributes: ['id', 'imgUrl', 'repImgYn'],
                   where: { repImgYn: 'Y' },
                   required: false,
                   separate: true,
@@ -498,7 +497,8 @@ router.get('/all/main', async (req, res, next) => {
             include: [
          { 
             model: ItemImage, 
-                  attributes: ['imgUrl'],
+                  attributes: ['id', 'imgUrl', 'repImgYn'],
+                  where: { repImgYn: 'Y' },
                   required: false,
                   separate: true,
                   limit: 1,
@@ -506,6 +506,8 @@ router.get('/all/main', async (req, res, next) => {
          {
             model: Category,
                   attributes: ['categoryName'],
+                  through: { attributes: [] },
+                  required: false,
          },
             ],
          order: [['createdAt', 'DESC']],
@@ -694,12 +696,12 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
 
       if (req.files && req.files.length > 0) {
          await ItemImage.destroy({ where: { itemId: item.id } })
-         const base = getBaseUrl(req)
+         // 상대 경로로 저장 - 프론트엔드에서 buildImageUrl로 처리
          const images = req.files.map((file) => {
             const truncatedName = truncateFileName(file.originalname)
             return {
                oriImgName: truncatedName,
-               imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
+               imgUrl: `/uploads/${encodeURIComponent(file.filename)}`,
                repImgYn: 'N',
                itemId: item.id,
             }
