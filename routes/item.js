@@ -26,6 +26,19 @@ function getBaseUrl(req) {
    return `${proto}://${host}`
 }
 
+/**
+ * 파일명 길이 제한 (DB 컬럼 제한: 150자)
+ */
+function truncateFileName(filename) {
+   if (!filename) return ''
+   const maxLength = 150
+   if (filename.length <= maxLength) return filename
+   const ext = path.extname(filename)
+   const basename = path.basename(filename, ext)
+   const truncatedBasename = basename.substring(0, maxLength - ext.length)
+   return truncatedBasename + ext
+}
+
 // multer 설정
 const upload = multer({
    storage: multer.diskStorage({
@@ -98,6 +111,10 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
          categoryId: category.id,
       }))
       await ItemCategory.bulkCreate(itemCategories)
+
+      // 관련 캐시 무효화 (새로 등록한 상품이 목록에 바로 나타나도록)
+      cache.deleteByPattern('items:list:*')
+      cache.deleteByPattern('items:main:*')
 
       return res.status(201).json({
          success: true,
@@ -592,13 +609,19 @@ router.get('/:id', async (req, res, next) => {
          where: { id: req.params.id },
          include: [
             { model: ItemImage, attributes: ['id', 'oriImgName', 'imgUrl', 'repImgYn'] },
-            { model: Category, attributes: ['id', 'categoryName'] },
+            {
+               model: Category,
+               attributes: ['id', 'categoryName'],
+               through: { attributes: [] },
+               required: false,
+            },
             {
                model: Review,
                attributes: ['id', 'reviewDate', 'reviewContent', 'rating'],
+               required: false,
                include: [
-                  { model: ReviewImage, attributes: ['id', 'oriImgName', 'imgUrl'] },
-                  { model: User, attributes: ['id', 'userId', 'name'] },
+                  { model: ReviewImage, attributes: ['id', 'oriImgName', 'imgUrl'], required: false },
+                  { model: User, attributes: ['id', 'userId', 'name'], required: false },
                ],
             },
          ],
@@ -623,15 +646,33 @@ router.get('/:id', async (req, res, next) => {
  */
 router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, next) => {
    try {
+      console.log('📝 상품 수정 요청:', { id: req.params.id, bodyKeys: Object.keys(req.body) })
+      
       const { itemNm, price, stockNumber, itemDetail, itemSellStatus, itemSummary, discountPercent, categories } = req.body
 
-      let parsedCategories = []
-      try {
-         parsedCategories = JSON.parse(categories)
-      } catch (err) {
-         const error = new Error('카테고리 파싱에 실패했습니다.')
+      // 필수 필드 검증
+      if (!itemNm || !price || stockNumber === undefined || !itemSellStatus) {
+         const error = new Error('필수 필드가 누락되었습니다. (itemNm, price, stockNumber, itemSellStatus)')
          error.status = 400
          return next(error)
+      }
+
+      let parsedCategories = []
+      if (categories) {
+         try {
+            if (typeof categories === 'string') {
+               parsedCategories = JSON.parse(categories)
+            } else if (Array.isArray(categories)) {
+               parsedCategories = categories
+            } else {
+               parsedCategories = []
+            }
+         } catch (err) {
+            console.error('❌ 카테고리 파싱 오류:', err)
+            const error = new Error('카테고리 파싱에 실패했습니다.')
+            error.status = 400
+            return next(error)
+         }
       }
 
       const item = await Item.findByPk(req.params.id)
@@ -654,32 +695,48 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
       if (req.files && req.files.length > 0) {
          await ItemImage.destroy({ where: { itemId: item.id } })
          const base = getBaseUrl(req)
-         const images = req.files.map((file) => ({
-            oriImgName: file.originalname,
-            imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
-            repImgYn: 'N',
-            itemId: item.id,
-         }))
+         const images = req.files.map((file) => {
+            const truncatedName = truncateFileName(file.originalname)
+            return {
+               oriImgName: truncatedName,
+               imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
+               repImgYn: 'N',
+               itemId: item.id,
+            }
+         })
          if (images.length > 0) images[0].repImgYn = 'Y'
          await ItemImage.bulkCreate(images)
       }
 
       await ItemCategory.destroy({ where: { itemId: item.id } })
 
-      const categoryInstances = await Promise.all(
-         parsedCategories.map(async (data) => {
-            const [category] = await Category.findOrCreate({ where: { categoryName: data.trim() } })
-            return category
-         })
-      )
+      if (parsedCategories && parsedCategories.length > 0) {
+         const categoryInstances = await Promise.all(
+            parsedCategories.map(async (data) => {
+               const categoryName = typeof data === 'string' ? data.trim() : (data?.trim?.() || String(data).trim())
+               if (!categoryName) return null
+               const [category] = await Category.findOrCreate({ where: { categoryName } })
+               return category
+            })
+         )
 
-      const itemCategories = categoryInstances.map((category) => ({ itemId: item.id, categoryId: category.id }))
-      await ItemCategory.bulkCreate(itemCategories)
+         const validCategories = categoryInstances.filter(Boolean)
+         if (validCategories.length > 0) {
+            const itemCategories = validCategories.map((category) => ({ itemId: item.id, categoryId: category.id }))
+            await ItemCategory.bulkCreate(itemCategories)
+         }
+      }
+
+      // 관련 캐시 무효화 (수정한 상품이 목록에 바로 반영되도록)
+      cache.deleteByPattern('items:list:*')
+      cache.deleteByPattern('items:main:*')
 
       return res.json({ success: true, message: '상품이 성공적으로 수정되었습니다.' })
    } catch (error) {
+      console.error('❌ 상품 수정 오류:', error)
+      console.error('스택:', error.stack)
       error.status = error.status || 500
-      error.message = '상품 수정 실패'
+      error.message = error.message || '상품 수정 실패'
       return next(error)
    }
 })
@@ -699,8 +756,8 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res, next) => {
       await item.destroy()
       
       // 관련 캐시 무효화
-      cache.deleteByPattern('items:list')
-      cache.deleteByPattern('items:main')
+      cache.deleteByPattern('items:list:*')
+      cache.deleteByPattern('items:main:*')
       
       return res.json({ success: true, message: '상품이 삭제되었습니다.' })
    } catch (error) {
