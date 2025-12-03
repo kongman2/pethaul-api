@@ -173,6 +173,29 @@ if (!fs.existsSync(uploadsDir)) {
 
 // 이미지 파일에 대한 CORS 및 CORB 차단 방지 헤더 추가 미들웨어
 app.use('/uploads', (req, res, next) => {
+   // OPTIONS preflight 요청 처리
+   if (req.method === 'OPTIONS') {
+      const origin = req.headers.origin
+      if (origin) {
+         const allowedOrigins = process.env.FRONTEND_APP_URL
+            ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+            : ['http://localhost:5173', 'https://pethaul.vercel.app']
+         
+         if (allowedOrigins.includes(origin) || origin.includes('vercel.app') || process.env.NODE_ENV === 'development') {
+            res.setHeader('Access-Control-Allow-Origin', origin)
+            res.setHeader('Access-Control-Allow-Credentials', 'true')
+         }
+      } else {
+         res.setHeader('Access-Control-Allow-Origin', '*')
+      }
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.setHeader('Access-Control-Max-Age', '86400')
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+      res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
+      return res.status(204).end()
+   }
+   
    // CORS 헤더 설정 (이미지 파일도 ORB/CORB 차단 방지)
    const origin = req.headers.origin
    if (origin) {
@@ -189,7 +212,7 @@ app.use('/uploads', (req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
    }
    
-   // ORB/CORB 차단 방지를 위한 헤더
+   // ORB/CORB 차단 방지를 위한 헤더 (모든 이미지 요청에 필수)
    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
    res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
    
@@ -240,6 +263,23 @@ app.use('/uploads', (req, res, next) => {
          res.setHeader('Content-Type', 'application/octet-stream')
       }
       
+      // CORS 헤더 재설정 (파일 서빙 시)
+      const origin = req.headers.origin
+      if (origin) {
+         const allowedOrigins = process.env.FRONTEND_APP_URL
+            ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+            : ['http://localhost:5173', 'https://pethaul.vercel.app']
+         
+         if (allowedOrigins.includes(origin) || origin.includes('vercel.app') || process.env.NODE_ENV === 'development') {
+            res.setHeader('Access-Control-Allow-Origin', origin)
+            res.setHeader('Access-Control-Allow-Credentials', 'true')
+         }
+      } else {
+         res.setHeader('Access-Control-Allow-Origin', '*')
+      }
+      
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+      res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
       res.setHeader('X-Content-Type-Options', 'nosniff')
       res.sendFile(filePath)
    })
@@ -249,7 +289,7 @@ app.use(
    '/uploads',
    express.static(uploadsDir, {
       fallthrough: true, // 커스텀 미들웨어에서 처리 못한 경우에만 사용
-      setHeaders: (res, filePath) => {
+      setHeaders: (res, filePath, stat, req) => {
          // MIME 타입 명시적 설정 (ORB/CORB 차단 방지)
          const ext = path.extname(filePath).toLowerCase()
          const mimeTypes = {
@@ -269,7 +309,24 @@ app.use(
             res.setHeader('Content-Type', 'application/octet-stream')
          }
          
-         // CORB 차단 방지: 브라우저가 MIME 타입 스니핑을 하지 않도록
+         // CORS 헤더 설정 (express.static에서도)
+         const origin = req.headers.origin
+         if (origin) {
+            const allowedOrigins = process.env.FRONTEND_APP_URL
+               ? process.env.FRONTEND_APP_URL.split(',').map((url) => url.trim())
+               : ['http://localhost:5173', 'https://pethaul.vercel.app']
+            
+            if (allowedOrigins.includes(origin) || origin.includes('vercel.app') || process.env.NODE_ENV === 'development') {
+               res.setHeader('Access-Control-Allow-Origin', origin)
+               res.setHeader('Access-Control-Allow-Credentials', 'true')
+            }
+         } else {
+            res.setHeader('Access-Control-Allow-Origin', '*')
+         }
+         
+         // CORB 차단 방지 헤더
+         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+         res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none')
          res.setHeader('X-Content-Type-Options', 'nosniff')
          
          // 캐시 헤더 (선택사항)

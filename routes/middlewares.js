@@ -156,14 +156,37 @@ exports.isAdmin = (req, res, next) => {
    }
 }
 
-// 토큰 유효성 확인
-exports.verifyToken = (req, res, next) => {
+// 토큰 유효성 확인 및 사용자 정보 설정
+exports.verifyToken = async (req, res, next) => {
    try {
-      // 프론트엔드에서 전달한 토큰
+      const authHeader = req.headers.authorization
+      
+      if (!authHeader) {
+         const error = new Error('인증 토큰이 필요합니다.')
+         error.status = 401
+         return next(error)
+      }
+
+      // JWT_SECRET 확인
+      if (!process.env.JWT_SECRET) {
+         const error = new Error('서버 설정 오류: JWT_SECRET이 설정되어 있지 않습니다.')
+         error.status = 500
+         return next(error)
+      }
 
       // 토큰 검증
-      req.decoded = jwt.verify(req.headers.authorization, process.env.JWT_SECRET)
+      const decoded = jwt.verify(authHeader, process.env.JWT_SECRET)
+      req.decoded = decoded
 
+      // 사용자 정보 가져오기 (isAdmin 미들웨어에서 req.user가 필요하므로)
+      const user = await User.findByPk(decoded.id)
+      if (!user) {
+         const error = new Error('사용자를 찾을 수 없습니다.')
+         error.status = 401
+         return next(error)
+      }
+
+      req.user = user
       return next() // 다음 미들웨어 이동
    } catch (error) {
       // 토큰 유효기간 초과
@@ -174,8 +197,15 @@ exports.verifyToken = (req, res, next) => {
       }
 
       // 유효하지 않은 토큰
-      error.status = 401
-      error.message = '유효하지 않은 토큰입니다.'
+      if (error.name === 'JsonWebTokenError') {
+         error.status = 401
+         error.message = '유효하지 않은 토큰입니다.'
+         return next(error)
+      }
+
+      // 기타 에러
+      error.status = error.status || 401
+      error.message = error.message || '인증 중 오류가 발생했습니다.'
       return next(error)
    }
 }

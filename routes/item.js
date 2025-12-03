@@ -202,8 +202,8 @@ router.get('/', async (req, res, next) => {
          try {
             console.log('🔍 카테고리 필터링 시작:', { sellCategory })
             
-            // 카테고리 정규화 (영어/한글 구분 없이 매칭)
-            const normalizedCategories = normalizeCategories(sellCategory)
+         // 카테고리 정규화 (영어/한글 구분 없이 매칭)
+         const normalizedCategories = normalizeCategories(sellCategory)
             console.log('📝 정규화된 카테고리:', normalizedCategories)
             
             if (!normalizedCategories || normalizedCategories.length === 0) {
@@ -220,10 +220,10 @@ router.get('/', async (req, res, next) => {
                   },
                })
             }
-            
-            // 정규화된 카테고리와 모든 변형을 포함하여 검색
-            const allCategoryNames = []
-            normalizedCategories.forEach(normalized => {
+         
+         // 정규화된 카테고리와 모든 변형을 포함하여 검색
+         const allCategoryNames = []
+         normalizedCategories.forEach(normalized => {
                if (normalized) {
                   const variants = getCategoryVariants(normalized)
                   console.log(`🔤 ${normalized}의 변형:`, variants)
@@ -253,31 +253,31 @@ router.get('/', async (req, res, next) => {
                   },
                })
             }
-            
-            // Category에서 해당 카테고리 이름들로 ID 찾기 (정규화된 값과 모든 변형 포함)
-            const categories = await Category.findAll({
+         
+         // Category에서 해당 카테고리 이름들로 ID 찾기 (정규화된 값과 모든 변형 포함)
+         const categories = await Category.findAll({
                where: { categoryName: { [Op.in]: uniqueCategoryNames } },
-               attributes: ['id', 'categoryName']
-            })
+            attributes: ['id', 'categoryName']
+         })
             
             console.log('🗂️ 찾은 카테고리:', categories.map(c => ({ id: c.id, name: c.categoryName })))
-            
-            if (categories.length > 0) {
-               const categoryIds = categories.map(cat => cat.id)
+         
+         if (categories.length > 0) {
+            const categoryIds = categories.map(cat => cat.id)
                // Category를 include하고 through 옵션으로 필터링
-               categoryFilter = {
+            categoryFilter = {
                   model: Category,
                   where: { id: { [Op.in]: categoryIds } },
                   through: {
                      attributes: [] // ItemCategory 테이블의 속성은 반환하지 않음
                   },
-                  required: true, // INNER JOIN으로 필터링
+               required: true, // INNER JOIN으로 필터링
                   attributes: ['id', 'categoryName']
-               }
+            }
                console.log('✅ 카테고리 필터 생성 완료:', categoryIds)
-            } else {
+         } else {
                console.log('⚠️ 데이터베이스에 카테고리가 없음 - 빈 결과 반환')
-               // 카테고리가 존재하지 않으면 빈 결과 반환
+            // 카테고리가 존재하지 않으면 빈 결과 반환
                return res.json({
                   success: true,
                   message: '상품 목록 조회 성공',
