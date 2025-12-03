@@ -18,6 +18,14 @@ try {
    fs.mkdirSync('uploads')
 }
 
+// ---------- utils ----------
+function getBaseUrl(req) {
+   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '')
+   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http'
+   const host = req.get('host')
+   return `${proto}://${host}`
+}
+
 // multer 설정
 const upload = multer({
    storage: multer.diskStorage({
@@ -67,9 +75,10 @@ router.post('/', verifyToken, isAdmin, upload.array('img'), async (req, res, nex
       })
 
       // 이미지 insert
+      const base = getBaseUrl(req)
       const images = req.files.map((file) => ({
          oriImgName: file.originalname,
-         imgUrl: `/uploads/${file.filename}`,
+         imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
          repImgYn: 'N',
          itemId: item.id,
       }))
@@ -642,9 +651,10 @@ router.put('/:id', verifyToken, isAdmin, upload.array('img'), async (req, res, n
 
       if (req.files && req.files.length > 0) {
          await ItemImage.destroy({ where: { itemId: item.id } })
+         const base = getBaseUrl(req)
          const images = req.files.map((file) => ({
             oriImgName: file.originalname,
-            imgUrl: `/uploads/${file.filename}`,
+            imgUrl: `${base}/uploads/${encodeURIComponent(file.filename)}`,
             repImgYn: 'N',
             itemId: item.id,
          }))
