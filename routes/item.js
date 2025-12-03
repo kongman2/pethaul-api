@@ -695,6 +695,11 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res, next) => {
       }
 
       await item.destroy()
+      
+      // 관련 캐시 무효화
+      cache.deleteByPattern('items:list')
+      cache.deleteByPattern('items:main')
+      
       return res.json({ success: true, message: '상품이 삭제되었습니다.' })
    } catch (error) {
       error.status = error.status || 500

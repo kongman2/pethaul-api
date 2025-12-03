@@ -85,6 +85,21 @@ class SimpleCache {
    size() {
       return this.cache.size
    }
+
+   /**
+    * 패턴으로 캐시 항목 삭제
+    * @param {string} pattern - 삭제할 패턴 (예: 'items:list')
+    */
+   deleteByPattern(pattern) {
+      let deletedCount = 0
+      for (const key of this.cache.keys()) {
+         if (key.startsWith(pattern)) {
+            this.cache.delete(key)
+            deletedCount++
+         }
+      }
+      return deletedCount
+   }
 }
 
 // 싱글톤 인스턴스
