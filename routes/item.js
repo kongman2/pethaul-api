@@ -410,6 +410,7 @@ router.get('/all/main', async (req, res, next) => {
                'itemNm',
                'price',
                'itemSellStatus',
+               'discountPercent',
                [
                   sequelize.literal(`(
                      SELECT COALESCE(SUM(oi.count), 0)
@@ -444,6 +445,7 @@ router.get('/all/main', async (req, res, next) => {
                'itemNm',
                'price',
                'itemSellStatus',
+               'discountPercent',
                [
                   sequelize.literal(`(
                      SELECT COUNT(*)
@@ -475,7 +477,7 @@ router.get('/all/main', async (req, res, next) => {
             limit,
          }),
          Item.findAll({
-            attributes: ['id', 'itemNm', 'price', 'itemSellStatus'],
+            attributes: ['id', 'itemNm', 'price', 'itemSellStatus', 'discountPercent'],
             include: [
          { 
             model: ItemImage, 
