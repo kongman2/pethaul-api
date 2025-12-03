@@ -198,8 +198,8 @@ exports.verifyToken = async (req, res, next) => {
 
       // 유효하지 않은 토큰
       if (error.name === 'JsonWebTokenError') {
-         error.status = 401
-         error.message = '유효하지 않은 토큰입니다.'
+      error.status = 401
+      error.message = '유효하지 않은 토큰입니다.'
          return next(error)
       }
 
