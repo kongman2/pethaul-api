@@ -7,6 +7,7 @@
     "start": "node app.js",
     "create-db": "node scripts/create-db.js",
     "create-admin": "node scripts/create-admin.js",
+    "add-indexes": "node scripts/add-search-indexes.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
    "author": "",

@@ -6,6 +6,8 @@ const fs = require('fs')
 const { Item, ItemImage, Category, ItemCategory, Review, ReviewImage, User, Order, OrderItem, SearchKeyword, sequelize } = require('../models')
 const { isAdmin, verifyToken, isLoggedIn } = require('./middlewares')
 const { Op, col, fn } = require('sequelize')
+const { normalizeCategories, getCategoryVariants } = require('../utils/categoryNormalizer')
+const { cache, generateCacheKey } = require('../utils/cache')
 
 const router = express.Router()
 
@@ -113,6 +115,20 @@ router.get('/', async (req, res, next) => {
 
       const searchTerm = req.query.searchTerm || ''
       let sellCategory = req.query.sellCategory ?? req.query['sellCategory[]'] ?? null
+      
+      // 캐시 키 생성 (검색어, 카테고리, 페이지, limit 포함)
+      const cacheKey = generateCacheKey('items:list', {
+         searchTerm: searchTerm || '',
+         sellCategory: Array.isArray(sellCategory) ? sellCategory.sort().join(',') : (sellCategory || ''),
+         page,
+         limit,
+      })
+      
+      // 캐시에서 조회 시도
+      const cachedResult = cache.get(cacheKey)
+      if (cachedResult) {
+         return res.json(cachedResult)
+      }
 
       // URL 디코딩 처리 및 정규화
       if (sellCategory) {
@@ -125,7 +141,6 @@ router.get('/', async (req, res, next) => {
                      try {
                         return decodeURIComponent(cat)
                      } catch (e) {
-                        console.warn('sellCategory 배열 요소 디코딩 실패:', e.message, cat)
                         return cat
                      }
                   }
@@ -142,7 +157,6 @@ router.get('/', async (req, res, next) => {
                   sellCategory = [sellCategory]
                }
             } catch (e) {
-               console.warn('sellCategory 디코딩 실패:', e.message, sellCategory)
                // 디코딩 실패 시 원본을 배열로 변환
                sellCategory = sellCategory.includes(',') 
                   ? sellCategory.split(',').map(cat => cat.trim()).filter(Boolean)
@@ -167,10 +181,19 @@ router.get('/', async (req, res, next) => {
       // Category 필터링이 있는 경우 ItemCategory를 통해 필터링
       let categoryFilter = null
       if (sellCategory && Array.isArray(sellCategory) && sellCategory.length > 0) {
-         // Category에서 해당 카테고리 이름들로 ID 찾기
+         // 카테고리 정규화 (영어/한글 구분 없이 매칭)
+         const normalizedCategories = normalizeCategories(sellCategory)
+         
+         // 정규화된 카테고리와 모든 변형을 포함하여 검색
+         const allCategoryNames = []
+         normalizedCategories.forEach(normalized => {
+            allCategoryNames.push(...getCategoryVariants(normalized))
+         })
+         
+         // Category에서 해당 카테고리 이름들로 ID 찾기 (정규화된 값과 모든 변형 포함)
          const categories = await Category.findAll({
-            where: { categoryName: { [Op.in]: sellCategory } },
-            attributes: ['id']
+            where: { categoryName: { [Op.in]: [...new Set(allCategoryNames)] } },
+            attributes: ['id', 'categoryName']
          })
          
          if (categories.length > 0) {
@@ -244,7 +267,7 @@ router.get('/', async (req, res, next) => {
             })
       }
 
-      return res.json({
+      const response = {
          success: true,
          message: '상품 목록 조회 성공',
          items,
@@ -254,7 +277,16 @@ router.get('/', async (req, res, next) => {
             currentPage: page,
             limit,
          },
-      })
+      }
+      
+      // 캐시에 저장 (검색어가 없거나 짧은 경우만 캐싱, 동적 검색은 캐싱 안 함)
+      if (!searchTerm || searchTerm.length <= 10) {
+         // 카테고리 필터만 있는 경우 5분, 검색어가 있는 경우 2분
+         const ttl = searchTerm ? 2 * 60 * 1000 : 5 * 60 * 1000
+         cache.set(cacheKey, response, ttl)
+      }
+      
+      return res.json(response)
    } catch (error) {
       error.status = error.status || 500
       error.message = '상품 목록 불러오기 실패'
@@ -267,6 +299,15 @@ router.get('/', async (req, res, next) => {
  */
 router.get('/all/main', async (req, res, next) => {
    const limit = Number(req.query.limit) || 5
+   
+   // 캐시 키 생성
+   const cacheKey = generateCacheKey('items:main', { limit })
+   
+   // 캐시에서 조회 시도
+   const cachedResult = cache.get(cacheKey)
+   if (cachedResult) {
+      return res.json(cachedResult)
+   }
 
    const today = new Date()
    today.setHours(0, 0, 0, 0)
@@ -386,6 +427,9 @@ router.get('/all/main', async (req, res, next) => {
       if (errors.length > 0) {
          responsePayload.partialErrors = errors
       }
+      
+      // 캐시에 저장 (5분)
+      cache.set(cacheKey, responsePayload, 5 * 60 * 1000)
 
       return res.json(responsePayload)
    } catch (error) {
@@ -401,6 +445,15 @@ router.get('/all/main', async (req, res, next) => {
 router.get('/popular-keywords', async (req, res, next) => {
    try {
       const limit = parseInt(req.query.limit, 10) || 4
+      
+      // 캐시 키 생성
+      const cacheKey = generateCacheKey('items:popular-keywords', { limit })
+      
+      // 캐시에서 조회 시도
+      const cachedResult = cache.get(cacheKey)
+      if (cachedResult) {
+         return res.json(cachedResult)
+      }
 
       // SearchKeyword 모델이 없을 경우 빈 배열 반환
       let keywords = []
@@ -412,15 +465,19 @@ router.get('/popular-keywords', async (req, res, next) => {
       })
       } catch (dbError) {
          // 데이터베이스 오류 시 빈 배열 반환 (서버 크래시 방지)
-         console.error('인기 검색어 조회 DB 오류:', dbError.message)
          keywords = []
       }
 
-      return res.json({
+      const response = {
          success: true,
          message: '인기 검색어 조회 성공',
          keywords: keywords.map((k) => k.keyword),
-      })
+      }
+      
+      // 캐시에 저장 (10분)
+      cache.set(cacheKey, response, 10 * 60 * 1000)
+
+      return res.json(response)
    } catch (error) {
       // 에러 발생 시에도 CORS 헤더 보장
       const origin = req.headers.origin
