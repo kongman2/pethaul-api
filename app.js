@@ -98,7 +98,9 @@ async function connectDB() {
       await sequelize.authenticate()
       console.log('데이터베이스 연결 성공')
       
-      const shouldAlter = process.env.NODE_ENV === 'production' && process.env.ALLOW_DB_ALTER === 'true'
+      // 프로덕션에서는 alter를 사용하지 않음 (Too many keys 에러 방지)
+      // 스키마 변경은 마이그레이션 스크립트를 사용하거나 수동으로 처리
+      const shouldAlter = process.env.NODE_ENV !== 'production' && process.env.ALLOW_DB_ALTER === 'true'
       await sequelize.sync({ force: false, alter: shouldAlter })
       console.log('데이터베이스 동기화 완료')
       

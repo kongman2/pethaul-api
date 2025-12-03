@@ -22,7 +22,9 @@
  *                   properties:
  *                     itemId:  { type: integer, example: 101 }
  *                     price:   { type: integer, example: 25900 }
- *                     quantity:{ type: integer, example: 2 }
+ *                     quantity:
+ *                       type: integer
+ *                       example: 2
  *     responses:
  *       201:
  *         description: 주문 완료
@@ -74,7 +76,9 @@
  *                     properties:
  *                       id:         { type: integer, example: 5001 }
  *                       orderDate:  { type: string, format: date-time }
- *                       orderStatus:{ type: string, example: "ORDER" }
+ *                       orderStatus:
+ *                         type: string
+ *                         example: "ORDER"
  *                       Items:
  *                         type: array
  *                         items:
@@ -137,7 +141,9 @@
  *                     properties:
  *                       id:         { type: integer, example: 5001 }
  *                       orderDate:  { type: string, format: date-time }
- *                       orderStatus:{ type: string, example: "ORDER" }
+ *                       orderStatus:
+ *                         type: string
+ *                         example: "ORDER"
  *                       orderPrice: { type: integer, example: 25900 }
  *                       count:      { type: integer, example: 1 }
  *                       itemNm:     { type: string,  example: "프리미엄 사료" }
@@ -175,7 +181,9 @@
  *                   properties:
  *                     id:         { type: integer, example: 5001 }
  *                     orderDate:  { type: string, format: date-time }
- *                     orderStatus:{ type: string, example: "ORDER" }
+ *                     orderStatus:
+ *                       type: string
+ *                       example: "ORDER"
  *                     Items:
  *                       type: array
  *                       items:

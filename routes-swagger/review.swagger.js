@@ -38,7 +38,9 @@
  *                     itemId:       { type: integer, example: 101 }
  *                     userId:       { type: integer, example: 7 }
  *                     reviewDate:   { type: string, format: date, example: "2025-09-01" }
- *                     reviewContent:{ type: string, example: "질도 좋고 배송 빨라요!" }
+ *                     reviewContent:
+ *                       type: string
+ *                       example: "질도 좋고 배송 빨라요!"
  *                     rating:       { type: integer, example: 5 }
  *                 reviewImages:
  *                   type: array
@@ -154,7 +156,9 @@
  *                     properties:
  *                       id:           { type: integer, example: 1 }
  *                       reviewDate:   { type: string, format: date, example: "2025-09-01" }
- *                       reviewContent:{ type: string, example: "만족합니다." }
+ *                       reviewContent:
+ *                         type: string
+ *                         example: "만족합니다."
  *                       rating:       { type: integer, example: 5 }
  *                       Item:
  *                         type: object
@@ -219,7 +223,9 @@
  *                     type: object
  *                     properties:
  *                       id:           { type: integer, example: 1 }
- *                       reviewContent:{ type: string, example: "가성비 좋아요!" }
+ *                       reviewContent:
+ *                         type: string
+ *                         example: "가성비 좋아요!"
  *                       rating:       { type: integer, example: 5 }
  *                       ReviewImages:
  *                         type: array
