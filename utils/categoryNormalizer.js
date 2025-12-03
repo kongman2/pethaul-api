@@ -85,6 +85,10 @@ function normalizeCategories(categories) {
  * @returns {string[]} 검색 가능한 모든 변형 배열
  */
 function getCategoryVariants(normalizedCategory) {
+  if (!normalizedCategory || typeof normalizedCategory !== 'string') {
+    return []
+  }
+  
   const variants = [normalizedCategory]
   
   // 매핑에서 해당 카테고리로 매핑되는 모든 키 찾기

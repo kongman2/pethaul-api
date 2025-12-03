@@ -174,38 +174,117 @@ router.get('/', async (req, res, next) => {
          sellCategory = null
       }
 
-      const whereClause = {
-         ...(searchTerm && { itemNm: { [Op.like]: `%${searchTerm}%` } }),
+      // 검색어가 있으면 itemNm, itemDetail, itemSummary에서 검색
+      let whereClause = {}
+      if (searchTerm && searchTerm.trim()) {
+         const searchPattern = `%${searchTerm.trim()}%`
+         whereClause = {
+            [Op.or]: [
+               { itemNm: { [Op.like]: searchPattern } },
+               { itemDetail: { [Op.like]: searchPattern } },
+               { itemSummary: { [Op.like]: searchPattern } },
+            ],
+         }
       }
 
       // Category 필터링이 있는 경우 ItemCategory를 통해 필터링
       let categoryFilter = null
       if (sellCategory && Array.isArray(sellCategory) && sellCategory.length > 0) {
-         // 카테고리 정규화 (영어/한글 구분 없이 매칭)
-         const normalizedCategories = normalizeCategories(sellCategory)
-         
-         // 정규화된 카테고리와 모든 변형을 포함하여 검색
-         const allCategoryNames = []
-         normalizedCategories.forEach(normalized => {
-            allCategoryNames.push(...getCategoryVariants(normalized))
-         })
-         
-         // Category에서 해당 카테고리 이름들로 ID 찾기 (정규화된 값과 모든 변형 포함)
-         const categories = await Category.findAll({
-            where: { categoryName: { [Op.in]: [...new Set(allCategoryNames)] } },
-            attributes: ['id', 'categoryName']
-         })
-         
-         if (categories.length > 0) {
-            const categoryIds = categories.map(cat => cat.id)
-            categoryFilter = {
-               model: ItemCategory,
-               where: { categoryId: { [Op.in]: categoryIds } },
-               required: true, // INNER JOIN으로 필터링
-               attributes: []
+         try {
+            console.log('🔍 카테고리 필터링 시작:', { sellCategory })
+            
+            // 카테고리 정규화 (영어/한글 구분 없이 매칭)
+            const normalizedCategories = normalizeCategories(sellCategory)
+            console.log('📝 정규화된 카테고리:', normalizedCategories)
+            
+            if (!normalizedCategories || normalizedCategories.length === 0) {
+               console.log('⚠️ 정규화 실패 - 빈 결과 반환')
+               return res.json({
+                  success: true,
+                  message: '상품 목록 조회 성공',
+                  items: [],
+                  pagination: {
+                     totalItems: 0,
+                     totalPages: 0,
+                     currentPage: page,
+                     limit,
+                  },
+               })
             }
-         } else {
-            // 카테고리가 존재하지 않으면 빈 결과 반환
+            
+            // 정규화된 카테고리와 모든 변형을 포함하여 검색
+            const allCategoryNames = []
+            normalizedCategories.forEach(normalized => {
+               if (normalized) {
+                  const variants = getCategoryVariants(normalized)
+                  console.log(`🔤 ${normalized}의 변형:`, variants)
+                  if (variants && variants.length > 0) {
+                     allCategoryNames.push(...variants)
+                  } else {
+                     // 변형이 없어도 원본 카테고리는 포함
+                     allCategoryNames.push(normalized)
+                  }
+               }
+            })
+            
+            const uniqueCategoryNames = [...new Set(allCategoryNames)]
+            console.log('📋 검색할 카테고리 목록:', uniqueCategoryNames)
+            
+            if (uniqueCategoryNames.length === 0) {
+               console.log('⚠️ 검색할 카테고리가 없음 - 빈 결과 반환')
+               return res.json({
+                  success: true,
+                  message: '상품 목록 조회 성공',
+                  items: [],
+                  pagination: {
+                     totalItems: 0,
+                     totalPages: 0,
+                     currentPage: page,
+                     limit,
+                  },
+               })
+            }
+            
+            // Category에서 해당 카테고리 이름들로 ID 찾기 (정규화된 값과 모든 변형 포함)
+            const categories = await Category.findAll({
+               where: { categoryName: { [Op.in]: uniqueCategoryNames } },
+               attributes: ['id', 'categoryName']
+            })
+            
+            console.log('🗂️ 찾은 카테고리:', categories.map(c => ({ id: c.id, name: c.categoryName })))
+            
+            if (categories.length > 0) {
+               const categoryIds = categories.map(cat => cat.id)
+               // Category를 include하고 through 옵션으로 필터링
+               categoryFilter = {
+                  model: Category,
+                  where: { id: { [Op.in]: categoryIds } },
+                  through: {
+                     attributes: [] // ItemCategory 테이블의 속성은 반환하지 않음
+                  },
+                  required: true, // INNER JOIN으로 필터링
+                  attributes: ['id', 'categoryName']
+               }
+               console.log('✅ 카테고리 필터 생성 완료:', categoryIds)
+            } else {
+               console.log('⚠️ 데이터베이스에 카테고리가 없음 - 빈 결과 반환')
+               // 카테고리가 존재하지 않으면 빈 결과 반환
+               return res.json({
+                  success: true,
+                  message: '상품 목록 조회 성공',
+                  items: [],
+                  pagination: {
+                     totalItems: 0,
+                     totalPages: 0,
+                     currentPage: page,
+                     limit,
+                  },
+               })
+            }
+         } catch (categoryError) {
+            console.error('❌ 카테고리 필터링 오류:', categoryError)
+            console.error('스택:', categoryError.stack)
+            // 카테고리 필터링 오류 시 빈 결과 반환
             return res.json({
                success: true,
                message: '상품 목록 조회 성공',
@@ -222,13 +301,13 @@ router.get('/', async (req, res, next) => {
 
       const includeModels = [
          { model: ItemImage, attributes: ['id', 'oriImgName', 'imgUrl', 'repImgYn'] },
-         {
+         // categoryFilter가 있으면 필터링된 Category만 include, 없으면 모든 Category include
+         ...(categoryFilter ? [categoryFilter] : [{
             model: Category,
             attributes: ['id', 'categoryName'],
             through: { attributes: [] },
             required: false,
-         },
-         ...(categoryFilter ? [categoryFilter] : []),
+         }]),
       ]
 
       // 전체 상품 갯수
@@ -288,8 +367,9 @@ router.get('/', async (req, res, next) => {
       
       return res.json(response)
    } catch (error) {
+      console.error('상품 목록 조회 오류:', error)
       error.status = error.status || 500
-      error.message = '상품 목록 불러오기 실패'
+      error.message = error.message || '상품 목록 불러오기 실패'
       return next(error)
    }
 })
